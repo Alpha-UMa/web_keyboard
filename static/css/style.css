@@ -124,6 +124,31 @@ body {
     background-color: var(--key-bg);
     flex-grow: 1; /* 平分空间 */
 }
+#trackpad-area {
+    width: 98vw; /* 和键盘等宽 */
+    height: 75vh; /* 占据大部分屏幕高度 */
+    max-width: 1200px;
+    background-color: #2d2d2d; /* 给一个深色背景以示区分 */
+    border: 1px dashed var(--key-border-color);
+    border-radius: var(--radius);
+    cursor: crosshair;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; /* 关键！禁用所有浏览器默认的触控行为，如滚动、缩放 */
+}
+
+/* 默认隐藏触控板 */
+#trackpad-area {
+    display: none;
+}
+
+/* 当 body 有 .trackpad-mode 类时，显示触控板，隐藏键盘 */
+body.trackpad-mode #trackpad-area {
+    display: block;
+}
+body.trackpad-mode #keyboard {
+    display: none;
+}
 .settings {
     margin-bottom: 15px;
     padding: 10px;

@@ -1,41 +1,62 @@
 from flask import Flask, request, jsonify, render_template
 from pynput.keyboard import Controller, Key
+from pynput.mouse import Controller as MouseController, Button
 import logging
 import random
 import time
 import uuid # 用于生成唯一的持久化令牌
 import json
 import os
-import atexit # 用于在程序退出时清理文件
 
 # 配置日志，方便调试
 logging.basicConfig(level=logging.INFO)
 
 # --- 新增：集中的、基于文件的令牌存储 ---
 TOKEN_DB_FILE = 'authorized_tokens.json'
-AUTHORIZED_TOKENS = set()
+# TOKEN_VALIDITY_SECONDS = 86400 * 7 # 令牌有效期7天 (7 * 24 * 60 * 60)
+TOKEN_VALIDITY_SECONDS = 2592000 # 令牌有效期30天
+AUTHORIZED_TOKENS = {} # 改为字典: { "token": creation_timestamp, ... }
 
-def load_tokens():
-    """从文件加载令牌到内存"""
+def load_and_prune_tokens():
+    """
+    加载令牌，并移除所有过期的令牌。
+    这个函数在服务器启动时和每次需要验证时调用。
+    """
     global AUTHORIZED_TOKENS
-    if os.path.exists(TOKEN_DB_FILE):
+    if not os.path.exists(TOKEN_DB_FILE):
+        AUTHORIZED_TOKENS = {}
+        return
+
+    try:
         with open(TOKEN_DB_FILE, 'r') as f:
-            try:
-                tokens = json.load(f)
-                AUTHORIZED_TOKENS = set(tokens)
-            except json.JSONDecodeError:
-                AUTHORIZED_TOKENS = set()
+            tokens_from_file = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        tokens_from_file = {}
+
+    current_time = time.time()
+    # 创建一个新的字典，只包含未过期的令牌
+    valid_tokens = {
+        token: timestamp
+        for token, timestamp in tokens_from_file.items()
+        if (current_time - timestamp) < TOKEN_VALIDITY_SECONDS
+    }
+
+    # 如果有令牌被清理，则重写文件
+    if len(valid_tokens) < len(tokens_from_file):
+        logging.info(f"Pruned {len(tokens_from_file) - len(valid_tokens)} expired tokens.")
+        AUTHORIZED_TOKENS = valid_tokens
+        save_tokens()
     else:
-        AUTHORIZED_TOKENS = set()
+        AUTHORIZED_TOKENS = valid_tokens
 
 def save_tokens():
-    """将内存中的令牌保存到文件"""
+    """将内存中的令牌字典保存到文件"""
     with open(TOKEN_DB_FILE, 'w') as f:
-        json.dump(list(AUTHORIZED_TOKENS), f)
+        json.dump(AUTHORIZED_TOKENS, f, indent=4)
 
 def add_token(token):
-    """添加一个新令牌并立即保存"""
-    AUTHORIZED_TOKENS.add(token)
+    """添加一个新令牌，并附带当前时间戳"""
+    AUTHORIZED_TOKENS[token] = time.time()
     save_tokens()
 
 def cleanup():
@@ -44,11 +65,10 @@ def cleanup():
         os.remove(TOKEN_DB_FILE)
         logging.info("Token database cleaned up.")
 
-# 注册退出清理函数
-atexit.register(cleanup)
-
 app = Flask(__name__)
 keyboard = Controller()
+# 创建一个 MouseController 实例
+mouse = MouseController()
 
 # 存储特殊按键的映射
 # pynput 将 'ctrl', 'shift' 等识别为 Key.ctrl, Key.shift
@@ -69,6 +89,13 @@ KEY_MAP = {
     # ... 可以继续添加其他功能键 F1-F12 等
 }
 
+# 创建一个鼠标按键的映射，方便处理
+MOUSE_BUTTON_MAP = {
+    'left': Button.left,
+    'right': Button.right,
+    'middle': Button.middle,
+}
+
 # --- 新增：认证状态管理 ---
 PIN_CODE = None
 PIN_EXPIRY = 0
@@ -86,7 +113,7 @@ def index():
 # --- 新增：PIN 认证路由 ---
 @app.route('/auth/pin', methods=['POST'])
 def auth_pin():
-    global PIN_CODE # 声明要修改全局变量
+    global PIN_CODE, PIN_EXPIRY # 声明要修改全局变量
 
     data = request.get_json()
     client_pin = data.get('pin')
@@ -99,7 +126,7 @@ def auth_pin():
         add_token(new_token)
         # 3. 让当前 PIN 失效 (重要！确保一次性)
         PIN_CODE = None 
-        logging.info(f"PIN a'u'th successful. Issued token: ...{new_token[-6:]}")
+        logging.info(f"PIN auth successful. Issued new token valid for {TOKEN_VALIDITY_SECONDS / 86400:.0f} days.")
         # 4. 将新令牌返回给客户端
         return jsonify({"status": "success", "token": new_token})
     else:
@@ -108,10 +135,11 @@ def auth_pin():
 
 
 # --- 新增：“守卫”中间件 ---
+# --- 修改“守卫”中间件 ---
 @app.before_request
 def check_auth_token():
-    # 关键：在每次请求开始时，都从文件重新加载最新的令牌列表
-    load_tokens()
+    # 关键：每次请求时加载并顺便清理过期的令牌
+    load_and_prune_tokens()
     # 对所有需要保护的端点进行检查
     # 如果请求的是认证页、主页或静态文件，则直接放行
     # 稍微优化一下，让 favicon.ico 也通过
@@ -122,12 +150,13 @@ def check_auth_token():
     auth_header = request.headers.get('Authorization')
     token = auth_header.split(' ')[1] if auth_header and auth_header.startswith('Bearer ') else None
 
+    # 现在检查 token 是否在字典的 key 中
     if token and token in AUTHORIZED_TOKENS:
         # 令牌有效，放行
         return
     else:
         # 令牌无效或不存在，拒绝访问
-        logging.warning(f"Unauthorized access attempt to '{request.endpoint}' from {request.remote_addr}")
+        logging.warning(f"Unauthorized access attempt to '{request.endpoint or request.path}' from {request.remote_addr}")
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
 # --- 按键事件处理路由 (不变) ---
@@ -160,11 +189,66 @@ def handle_key_event():
     except Exception as e:
         logging.error(f"Error processing key: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+# 新增：鼠标事件处理路由
+@app.route('/mouse_event', methods=['POST'])
+def handle_mouse_event():
+    # 这个路由同样受到 @app.before_request 守卫的保护
+    data = request.get_json()
+    event_type = data.get('type')
+
+    
+
+    try:
+        if event_type == 'move':
+            dx = data.get('dx', 0)
+            dy = data.get('dy', 0)
+            mouse.move(dx, dy)
+            logging.info(f"Received action: {event_type}")
+
+        elif event_type == 'click':
+            button_name = data.get('button', 'left')
+            button = MOUSE_BUTTON_MAP.get(button_name)
+            if button:
+                mouse.click(button)
+            logging.info(f"Received action: {event_type}, {button_name}")
+
+        elif event_type == 'press':
+            button_name = data.get('button', 'left')
+            button = MOUSE_BUTTON_MAP.get(button_name)
+            if button:
+                mouse.press(button)
+            logging.info(f"Received action: {event_type}, {button_name}")
+
+        elif event_type == 'release':
+            button_name = data.get('button', 'left')
+            button = MOUSE_BUTTON_MAP.get(button_name)
+            if button:
+                mouse.release(button)
+            logging.info(f"Received action: {event_type}, {button_name}")
+
+        elif event_type == 'scroll':
+            dx = data.get('dx', 0)
+            dy = data.get('dy', 0)
+            # pynput.mouse.scroll(dx, dy)
+            # dy > 0 是向下滚动, dy < 0 是向上滚动
+            mouse.scroll(dx, dy)
+            logging.info(f"Received action: {event_type}")
+        
+        else:
+            return jsonify({"status": "error", "message": "Invalid mouse event type"}), 400
+
+        return jsonify({"status": "success"})
+
+    except Exception as e:
+        logging.error(f"Error processing mouse event: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": f"Server failed to process mouse event: {e}"}), 500
 
 # --- 主程序入口修改 ---
 if __name__ == '__main__':
-    # 首次启动时，确保旧的令牌文件被清理
-    cleanup() 
+    # 关键：在启动时调用一次，清理掉所有旧的过期令牌
+    load_and_prune_tokens()
+
     # 1. 生成一个6位数的 PIN 码
     PIN_CODE = f"{random.randint(0, 999999):06d}"
     # 2. 设置5分钟的有效期

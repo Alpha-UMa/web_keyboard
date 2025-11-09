@@ -13,8 +13,20 @@
             <input type="checkbox" id="physical-keyboard-toggle">
             启用物理键盘映射
         </label>
+        <span>|</span>
+        <label>
+            模式: 
+            <select id="mode-toggle">
+                <option value="keyboard" selected>键盘</option>
+                <option value="trackpad">触控板</option>
+            </select>
+        </label>
     </div>
-    <div id="keyboard"></div>
+    <!-- 将键盘和新的触控板区域包裹在一个容器里 -->
+    <div id="input-area-container">
+        <div id="keyboard"></div>
+        <div id="trackpad-area"></div>
+    </div>
     <div id="auth-overlay">
         <div class="auth-box">
             <h2>身份验证</h2>
