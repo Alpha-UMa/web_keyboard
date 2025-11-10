@@ -7,6 +7,11 @@ import time
 import uuid # 用于生成唯一的持久化令牌
 import json
 import os
+import threading
+from collections import deque
+
+EVENT_QUEUE = deque()
+QUEUE_LOCK = threading.Lock()
 
 # 配置日志，方便调试
 logging.basicConfig(level=logging.INFO)
@@ -191,63 +196,71 @@ def handle_key_event():
         return jsonify({"status": "error", "message": str(e)}), 500
     
 # 新增：鼠标事件处理路由
-@app.route('/mouse_event', methods=['POST'])
+@app.route("/mouse_event", methods=["POST"])
 def handle_mouse_event():
-    # 这个路由同样受到 @app.before_request 守卫的保护
     data = request.get_json()
-    event_type = data.get('type')
+    if not data:
+        return jsonify({"status": "error", "message": "Invalid mouse event type"}), 400
+    # 加入队列
+    with QUEUE_LOCK:
+        EVENT_QUEUE.append(data)
+    return jsonify({"status": "success"})
 
-    
+def consumer():
+    mouse = MouseController()
+    MERGE_WINDOW = 0.005
+    while True:
+        start = time.time()
+        local_batch = []
+        with QUEUE_LOCK:
+            while EVENT_QUEUE:
+                local_batch.append(EVENT_QUEUE.popleft())
+        if not local_batch:
+            time.sleep(0.001)
+            continue
+        for ev in local_batch:
+            t = ev.get("type")
+            if t == "move":
+                dx = ev.get("dx", 0)
+                dy = ev.get("dy", 0)
+                mouse.move(dx, dy)
 
-    try:
-        if event_type == 'move':
-            dx = data.get('dx', 0)
-            dy = data.get('dy', 0)
-            mouse.move(dx, dy)
-            logging.info(f"Received action: {event_type}")
+            elif t == "click":
+                btn = ev.get("button","left")
+                button = MOUSE_BUTTON_MAP.get(btn)
+                if button:
+                    mouse.click(button)
+                logging.info(f"Received action: {t}, {btn}")
 
-        elif event_type == 'click':
-            button_name = data.get('button', 'left')
-            button = MOUSE_BUTTON_MAP.get(button_name)
-            if button:
-                mouse.click(button)
-            logging.info(f"Received action: {event_type}, {button_name}")
+            elif t == 'press':
+                btn = ev.get("button","left")
+                button = MOUSE_BUTTON_MAP.get(btn)
+                if button:
+                    mouse.press(button)
+                logging.info(f"Received action: {t}, {btn}")
 
-        elif event_type == 'press':
-            button_name = data.get('button', 'left')
-            button = MOUSE_BUTTON_MAP.get(button_name)
-            if button:
-                mouse.press(button)
-            logging.info(f"Received action: {event_type}, {button_name}")
+            elif t == 'release':
+                btn = ev.get("button","left")
+                button = MOUSE_BUTTON_MAP.get(btn)
+                if button:
+                    mouse.release(button)
+                logging.info(f"Received action: {t}, {btn}")
 
-        elif event_type == 'release':
-            button_name = data.get('button', 'left')
-            button = MOUSE_BUTTON_MAP.get(button_name)
-            if button:
-                mouse.release(button)
-            logging.info(f"Received action: {event_type}, {button_name}")
-
-        elif event_type == 'scroll':
-            dx = data.get('dx', 0)
-            dy = data.get('dy', 0)
-            # pynput.mouse.scroll(dx, dy)
-            # dy > 0 是向下滚动, dy < 0 是向上滚动
-            mouse.scroll(dx, dy)
-            logging.info(f"Received action: {event_type}")
-        
-        else:
-            return jsonify({"status": "error", "message": "Invalid mouse event type"}), 400
-
-        return jsonify({"status": "success"})
-
-    except Exception as e:
-        logging.error(f"Error processing mouse event: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": f"Server failed to process mouse event: {e}"}), 500
+            elif t == "scroll":
+                dx = ev.get("dx", 0)
+                dy = ev.get("dy", 0)
+                mouse.scroll(dx, dy)
+                #logging.info(f"Received action: {event_type}")
+        elapsed = time.time() - start
+        if elapsed < MERGE_WINDOW:
+            time.sleep(MERGE_WINDOW - elapsed)
 
 # --- 主程序入口修改 ---
 if __name__ == '__main__':
     # 关键：在启动时调用一次，清理掉所有旧的过期令牌
     load_and_prune_tokens()
+
+    threading.Thread(target=consumer, daemon=True).start()
 
     # 1. 生成一个6位数的 PIN 码
     PIN_CODE = f"{random.randint(0, 999999):06d}"
