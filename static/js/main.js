@@ -172,6 +172,9 @@ async function authenticateWithPin() {
             authToken = data.token;
             localStorage.setItem('webKeyboardAuthToken', authToken);
             hideAuthScreen();
+            // === 关键：认证成功后，才开始建立 WebSocket 连接 ===
+            if (socket) socket.disconnect(); // 断开旧的连接
+            setupSocketIO();
         } else {
             const data = await response.json().catch(() => ({ message: '认证失败' }));
             authMessage.textContent = data.message;
@@ -183,37 +186,28 @@ async function authenticateWithPin() {
 }
 
 // --- 事件发送 (修改后) ---
-async function sendKeyEvent(key, action) {
-    if (!authToken) {
-        console.error("无法发送事件：未认证");
-        showAuthScreen("会话已失效，请重新认证");
-        return;
-    }
-
-    try {
-        const keyToSend = key === ' ' ? 'space' : key;
-        const response = await fetch('/key_event', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}` // 关键：带上令牌
-            },
-            body: JSON.stringify({ key: keyToSend, action }),
-        });
-
-        if (!response.ok) {
-            // 如果令牌失效，服务器会返回 401
-            if (response.status === 401) {
-                showAuthScreen("认证已过期，请重新输入 PIN");
-            } else {
-                console.error(`服务器错误: ${response.status}`);
-            }
-        }
-    } catch (error) {
-        console.error('发送按键事件失败:', error);
-        showAuthScreen("与服务器的连接已断开");
+// 新的事件发送函数，现在它只是简单地 emit 事件
+function sendKeyEvent(key, action) {
+    if (socket && authToken) {
+        socket.emit('key_event', { key, action, token: authToken });
     }
 }
+
+function sendtextEvent(text) {
+    if (socket && authToken) {
+        socket.emit('text_event', { text, token: authToken });
+    }
+}
+
+async function sendclipboardText() {
+  try {
+    const text = await navigator.clipboard.readText();
+    sendtextEvent(text);
+  } catch (error) {
+    console.error(error.message);
+  }
+}
+
 
 function handlePress(element) {
     if (!element) return;
@@ -285,6 +279,8 @@ window.addEventListener('DOMContentLoaded', () => {
         hideAuthScreen();
         console.log("已加载本地认证令牌。");
         // 我们假设它是有效的。第一次发送事件时会进行最终验证。
+        // 如果有令牌，直接尝试连接 WebSocket
+        setupSocketIO();
     } else {
         showAuthScreen();
         console.log("未找到本地令牌，需要认证。");
@@ -393,6 +389,29 @@ const TAP_TIMEOUT = 250;       // 单击超时，适当延长以容错
 const DOUBLE_TAP_WINDOW = 350; // 双击间隔
 const DRAG_THRESHOLD = 5;      // 移动多少像素后算作移动/拖拽
 
+let socket;
+
+// === 替换/重写 sendKeyEvent 和 sendMouseEvent ===
+function setupSocketIO() {
+    // 建立连接
+    socket = io({ secure: true }); // 因为我们用了 https
+
+    socket.on('connect', () => {
+        console.log('Socket.IO connected!');
+        hideAuthScreen(); // 连接成功后隐藏认证界面
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Socket.IO disconnected!');
+        showAuthScreen('与服务器的连接已断开');
+    });
+
+    // 如果需要，可以监听服务器发来的错误信息
+    socket.on('error', (data) => {
+        console.error('Socket.IO error:', data.message);
+    });
+}
+
 // 状态机变量
 let touchState = {
     startX: 0, startY: 0, // 本次触摸的起始点
@@ -410,28 +429,30 @@ let touchState = {
     // 单击/双击相关
     lastTapTime: 0,
     tapCount: 0,
-    tapTimer: null
+    tapTimer: null,
+
+    // 用于低通滤波的平滑坐标
+    smoothX: 0,
+    smoothY: 0,
+    isFirstMove: true // 标记是否是移动的第一次事件
 };
 
 // 鼠标速度/滚动速度系数
-const MOUSE_SPEED_FACTOR = 3.5; // 可以调整
+const MOUSE_SPEED_FACTOR = 3.0; // 可以调整
 const SCROLL_SPEED_FACTOR = 0.1; // 可以调整
 
-async function sendMouseEvent(type, payload = {}) {
-    if (!authToken) return; // 借用现有的认证
-    
-    payload.type = type;
-    try {
-        await fetch('/mouse_event', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify(payload),
-        });
-    } catch (error) {
-        console.error('发送鼠标事件失败:', error);
+// === 新增：低通滤波器的权重 ===
+// 这个值在 0 到 1 之间。值越小，平滑效果越强，但跟随感会略有下降（感觉“黏”一些）。
+// 值越大，跟随感越强，但平滑效果越弱。0.2 是一个不错的起始值。
+const SMOOTHING_FACTOR = 0.2; 
+
+// 新的鼠标事件发送函数，现在它只是简单地 emit 事件
+function sendMouseEvent(type, payload = {}) {
+    if (socket && authToken) {
+        payload.type = type;
+        payload.token = authToken;
+        socket.emit('mouse_event', payload);
+        //alert("sendMouseEvent")
     }
 }
 
@@ -445,6 +466,10 @@ function setupTrackpadListeners() {
         const touches = e.touches;
         const touch = touches[0];
         const currentTime = new Date().getTime();
+        // --- 关键：在触摸开始时，用当前手指位置重置平滑坐标和滤波器 ---
+        touchState.smoothX = touch.clientX;
+        touchState.smoothY = touch.clientY;
+        touchState.isFirstMove = true;
 
         // --- 关键修正：如果正在多指冷却期，忽略新的触摸事件 ---
         if (touchState.inMultiTouchCooldown) {
@@ -494,13 +519,31 @@ function setupTrackpadListeners() {
         if (touches.length === 0) return;
         
         const touch = touches[0];
-        const dx = touch.clientX - touchState.lastX;
-        const dy = touch.clientY - touchState.lastY;
 
         // 计算从开始到现在的总位移
         const totalMoveX = touch.clientX - touchState.startX;
         const totalMoveY = touch.clientY - touchState.startY;
         const moveDistance = Math.sqrt(totalMoveX * totalMoveX + totalMoveY * totalMoveY);
+
+    // --- 单指移动的全新处理方式 ---
+    
+        // 1. 应用低通滤波器
+        // 公式: smooth_coord = (current_coord * factor) + (previous_smooth_coord * (1 - factor))
+        touchState.smoothX = (touch.clientX * SMOOTHING_FACTOR) + (touchState.smoothX * (1.0 - SMOOTHING_FACTOR));
+        touchState.smoothY = (touch.clientY * SMOOTHING_FACTOR) + (touchState.smoothY * (1.0 - SMOOTHING_FACTOR));
+
+        // 2. 计算平滑后的位移
+        // 如果是第一次移动，位移是相对于触摸起始点的平滑位置
+        // 否则，是相对于上一次的平滑位置
+        let dx1, dy1;
+        if (touchState.isFirstMove) {
+            dx1 = touchState.smoothX - touchState.startX;
+            dy1 = touchState.smoothY - touchState.startY;
+            touchState.isFirstMove = false;
+        } else {
+            dx1 = touchState.smoothX - touchState.lastX;
+            dy1 = touchState.smoothY - touchState.lastY;
+        }
 
         // --- 只要移动超过阈值，就不再可能是点击 ---
         if (moveDistance > DRAG_THRESHOLD) {
@@ -512,7 +555,7 @@ function setupTrackpadListeners() {
             // -- 多指移动 -> 滚动 --
             if (touches.length > 1) {
                 touchState.isScrolling = true;
-                sendMouseEvent('scroll', { dx: 0, dy: dy * SCROLL_SPEED_FACTOR });
+                sendMouseEvent('scroll', { dx1: 0, dy: dy1 * SCROLL_SPEED_FACTOR });
             } 
             // -- 单指移动 --
             else if (!touchState.isMultiTouch) { // 确保不是从多指变回单指
@@ -523,20 +566,18 @@ function setupTrackpadListeners() {
                 }
                 // -- 普通移动/拖拽中 --
                 // 在 touchmove 的 sendMouseEvent('move', ...) 前面加一行
-                if (new Date().getTime() - touchState.lastMoveTime < 30) return; // 简易节流
+                //if (new Date().getTime() - touchState.lastMoveTime < 30) return; // 简易节流
                 touchState.lastMoveTime = new Date().getTime();
-                let effective1 = 1;
-                // 添加一个简单的非线性曲线
-                // 当绝对值很小时，进一步减小其效果
-                if (Math.abs(dx * dy) < 25) {
-                    effective1 = 0.5;
-                }
-                sendMouseEvent('move', { dx: effective1 * dx * MOUSE_SPEED_FACTOR, dy: effective1 * dy * MOUSE_SPEED_FACTOR });
+
+                sendMouseEvent('move', { dx: dx1 * MOUSE_SPEED_FACTOR, dy: dy1 * MOUSE_SPEED_FACTOR });
             }
         }
         
         touchState.lastX = touch.clientX;
         touchState.lastY = touch.clientY;
+        // 5. 更新“上一次”的平滑坐标
+        touchState.lastX = touchState.smoothX;
+        touchState.lastY = touchState.smoothY;
     });
 
     // --- TOUCH END ---

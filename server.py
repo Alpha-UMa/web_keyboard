@@ -1,4 +1,6 @@
 from flask import Flask, request, jsonify, render_template
+from flask_socketio import SocketIO
+from flask_cors import CORS
 from pynput.keyboard import Controller, Key
 from pynput.mouse import Controller as MouseController, Button
 import logging
@@ -18,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 
 # --- 新增：集中的、基于文件的令牌存储 ---
 TOKEN_DB_FILE = 'authorized_tokens.json'
-# TOKEN_VALIDITY_SECONDS = 86400 * 7 # 令牌有效期7天 (7 * 24 * 60 * 60)
-TOKEN_VALIDITY_SECONDS = 2592000 # 令牌有效期30天
+TOKEN_VALIDITY_SECONDS = 86400 * 7 # 令牌有效期7天 (7 * 24 * 60 * 60)
+# TOKEN_VALIDITY_SECONDS = 2592000 # 令牌有效期30天
 AUTHORIZED_TOKENS = {} # 改为字典: { "token": creation_timestamp, ... }
 
 def load_and_prune_tokens():
@@ -70,7 +72,15 @@ def cleanup():
         os.remove(TOKEN_DB_FILE)
         logging.info("Token database cleaned up.")
 
+# --- Flask 和 SocketIO 设置 ---
 app = Flask(__name__)
+socketio = SocketIO(app)
+CORS(app)
+# --- 关键修正：在初始化 SocketIO 时配置 CORS ---
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 如果想更安全，可以只允许你的 Nginx 地址，或者允许多个
+
 keyboard = Controller()
 # 创建一个 MouseController 实例
 mouse = MouseController()
@@ -163,48 +173,93 @@ def check_auth_token():
         # 令牌无效或不存在，拒绝访问
         logging.warning(f"Unauthorized access attempt to '{request.endpoint or request.path}' from {request.remote_addr}")
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    
+# 新增：鼠标事件处理路由
+# --- WebSocket 事件处理器 (新) ---
+# --- 新增：WebSocket 事件处理器 ---
 
-# --- 按键事件处理路由 (不变) ---
-# 接收按键事件的 API
-@app.route('/key_event', methods=['POST'])
-def handle_key_event():
-    # 因为有 before_request 守卫，能进入这里的请求都已是授权的
-    data = request.get_json()
-    if not data or 'key' not in data or 'action' not in data:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+@socketio.on('connect')
+def handle_connect():
+    """客户端连接时触发"""
+    # 可以在这里做一些初始化的事情，比如验证令牌
+    logging.info('Client connected')
+    # 我们将在每个事件中验证令牌，所以这里暂时不做事
 
-    key_str = data['key']
-    action = data['action']
+@socketio.on('disconnect')
+def handle_disconnect():
+    logging.info('Client disconnected')
+
+def check_token_in_payload(data):
+    """一个辅助函数，用于检查事件数据中是否包含有效令牌"""
+    token = data.get('token')
+    if token and token in AUTHORIZED_TOKENS:
+        return True
+    logging.warning("WebSocket event rejected: Invalid token")
+    return False
+
+@socketio.on('text_event')
+def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
+    """处理通过 WebSocket 发送的文本事件"""
+    load_and_prune_tokens()
+    
+    # 2. 不再需要 request.get_json()，直接使用 data
+    if not check_token_in_payload(data):
+        return
+
+    # 从 data 字典中获取信息
+    text = data.get('text')
+    
+    if not text:
+        return # 忽略无效数据
+
+    logging.info(f"Received text_event: text='{text}'")
+
+    try:
+        keyboard.type(text)
+    except Exception as e:
+        logging.error(f"Error on typing '{text}': {e}")
+
+@socketio.on('key_event')
+def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
+    """处理通过 WebSocket 发送的键盘事件"""
+    load_and_prune_tokens()
+    
+    # 2. 不再需要 request.get_json()，直接使用 data
+    if not check_token_in_payload(data):
+        return
+
+    # 从 data 字典中获取信息
+    key_str = data.get('key')
+    action = data.get('action')
+    
+    if not key_str or not action:
+        return # 忽略无效数据
+
+    logging.info(f"Received key_event: key='{key_str}', action='{action}'")
     
     # 将网页传来的键名转换为 pynput 可以识别的对象
     # 如果是特殊键，从 KEY_MAP 中查找；否则，直接使用字符
     key_to_process = KEY_MAP.get(key_str.lower(), key_str)
-    
-    logging.info(f"Received action: {action}, key: {key_str} -> {key_to_process}")
-
     try:
         if action == 'down':
             keyboard.press(key_to_process)
         elif action == 'up':
             keyboard.release(key_to_process)
-        else:
-            return jsonify({"status": "error", "message": "Invalid action"}), 400
-        
-        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(f"Error processing key: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-    
-# 新增：鼠标事件处理路由
-@app.route("/mouse_event", methods=["POST"])
-def handle_mouse_event():
-    data = request.get_json()
-    if not data:
-        return jsonify({"status": "error", "message": "Invalid mouse event type"}), 400
-    # 加入队列
+        logging.error(f"Pynput key error on '{key_str}': {e}")
+
+@socketio.on('mouse_event')
+def handle_ws_mouse_event(data):
+    # 这个函数现在变得和你的 /mouse_event 路由一样简单
+    # 它只负责接收数据并放入队列
+    #logging.info("data: %s", data)
+
+    if not check_token_in_payload(data):
+        return
+
+    # 不再需要解析 event_type，直接把整个 data 包扔进去
     with QUEUE_LOCK:
         EVENT_QUEUE.append(data)
-    return jsonify({"status": "success"})
 
 def consumer():
     mouse = MouseController()
@@ -274,7 +329,7 @@ if __name__ == '__main__':
     print("  This PIN will expire in 5 minutes.")
     print("  Enter this PIN on the web page to connect.")
     print("=" * 40)
-    # 监听在 0.0.0.0 上，这样局域网内的其他设备才能访问
+    # 监听在本地，局域网内的其他设备通过 nginx 反向代理访问
     # debug=True 会在代码修改后自动重启，但生产环境请关闭
     # debug=False 在这里很重要，因为 debug 模式会运行两次初始化，可能导致 PIN 码问题 
-    app.run(host='0.0.0.0', port=15000, ssl_context=('cert.pem', 'key.pem'), debug=False)
+    socketio.run(app, host='127.0.0.1', port=8000, debug=False)
