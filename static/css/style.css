@@ -1,19 +1,29 @@
 :root {
-    /* --- 核心布局变量 --- */
-    /* 1u = 6% of viewport width. 你可以调整这个值来缩放整个键盘 */
-    --u: 6vw; 
-    /* 在手机竖屏上，用 vmin 可能更好，保证在窄长屏幕上不会过大 */
-    /* --u: 6vmin; */
-    --gap: 0.5vw; /* 间距固定为视口最小边的0.5% */
-
-    /* --- 其他视觉变量 --- */
     --key-bg: #555;
     --key-bg-pressed: #77aaff;
     --key-border-color: #666;
     --keyboard-bg: #444;
     --text-color: #fff;
     --radius: 5px;
+    /* 默认暗色主题 */
+    --bg-color: #333;
+    --text-color: #fff;
+    --key-bg: #555;
+    --key-stroke: #666;
+    --key-pressed-bg: #77aaff;
+    --svg-icon-color: #fff;
 }
+
+body.theme-light {
+    /* 亮色主题下的颜色变量 */
+    --bg-color: #f0f0f0;
+    --text-color: #333;
+    --key-bg: #fff;
+    --key-stroke: #ccc;
+    --key-pressed-bg: #d0e0ff;
+    --svg-icon-color: #555;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     text-align: center;
@@ -37,6 +47,7 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    -webkit-backdrop-filter: blur(5px);
     backdrop-filter: blur(5px);
     color: white;
 }
@@ -67,31 +78,74 @@ body {
     height: 20px;
 }
 #keyboard {
-    display: flex;
-    flex-direction: column;
-    /* 键盘总宽度不再需要固定，它由内容决定 */
+    position: relative;
+    width: 96vw;
+    max-width: 1200px;
     margin: auto;
-    gap: var(--gap);
-    padding: var(--gap);
-    background-color: var(--keyboard-bg);
-    border-radius: var(--radius);
-    box-sizing: border-box;
+    /* 我们可以给它一个 aspect-ratio，让它保持 SVG 的比例 */
+    aspect-ratio: 415.7615 / 165.7;
 }
 
-.row {
-    display: flex;
-    gap: var(--gap);
-    /* 行的高度由内容决定，也就是按键的高度 */
+#keyboard-layout-svg {
+    width: 100%;
+    height: 100%;
+    /*filter: invert(1); 保持你的主题切换技巧 */
+}
+
+/* SVG 按键的样式 */
+#keyboard-layout-svg .key-shape rect {
+    fill: #555; /* 默认按键颜色 */
+    stroke: #666;
+    stroke-width: 0.5;
+    transition: fill 0.1s ease; /* 按下颜色变化的过渡效果 */
+}
+#keyboard-layout-svg .key-shape text {
+    -webkit-user-select: none; /* 针对Webkit浏览器 */
+    -moz-user-select: none; /* 针对Firefox */
+    -ms-user-select: none; /* 针对IE10+ */
+    user-select: none; /* 禁止文字选择 */
+    fill: #fff;
+    pointer-events: none; /* 确保文字不会干扰事件 */
+}
+
+#keyboard-layout-svg .key-shape line {
+    stroke: #fff;
+    pointer-events: none;
+}
+
+#keyboard-layout-svg .key-shape path {
+    stroke: #fff;
+    fill: #fff;
+    pointer-events: none;
+}
+
+/* SVG 按键按下的样式 */
+#keyboard-layout-svg .key-shape.pressed rect {
+    fill: #77aaff; /* 按下时的颜色 */
+}
+
+
+#interaction-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 交互 div 的样式 (它们是看不见的) */
+#interaction-layer .interaction-key {
+    position: absolute;
+    /* background-color: rgba(255, 0, 0, 0.2); /* 调试时可以打开，看位置对不对 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent; /* 去掉移动端点击高光 */
 }
 
 .key {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    /*grid-column: span var(--key-fr, 28);  关键！按键宽度由它占几份(fr)决定 */
+    height: 5.9vw; /* 高度也用相对单位，保证长宽比大致固定 */
     /* --- 关键改动在这里 --- */
-    height: var(--u); /* 高度为 1u */
-    width: calc(var(--u) * var(--key-u, 1)); /* 宽度 = 1u * 按键自身的u值，默认为1 */
-    border: 1px solid var(--key-border-color);
+    border: 0px solid var(--key-border-color);
     background-color: var(--key-bg);
     /* ... 其他视觉样式 ... */
     transition: transform 0.05s ease, background-color 0.05s ease;
@@ -99,31 +153,10 @@ body {
 
 .key.pressed {
     background-color: var(--key-bg-pressed);
-    transform: scale(0.95);
+    transform: scale(1);
 }
 
-/* --- 专为方向键容器 --- */
-.key-container {
-    display: flex;
-    padding: 0 !important; /* !important 强制覆盖 .key 的 padding */
-    border: none !important;
-    background-color: transparent !important;
-}
 
-/* 垂直排列的子按键 (↑ ↓) */
-.key-container.vertical {
-    gap: 0.25vw;
-    flex-direction: column;
-}
-.key-container .sub-key {
-    /* 子按键继承父容器的 display, justify-content 等 */
-    /* 只需要覆盖自己的尺寸和边框 */
-    height: 100%; /* 子按键高度填满容器 */
-    width: 100%;  /* 子按键宽度填满容器 */
-    border: 1px solid var(--key-border-color);
-    background-color: var(--key-bg);
-    flex-grow: 1; /* 平分空间 */
-}
 #trackpad-area {
     width: 98vw; /* 和键盘等宽 */
     height: 75vh; /* 占据大部分屏幕高度 */
@@ -132,8 +165,8 @@ body {
     border: 1px dashed var(--key-border-color);
     border-radius: var(--radius);
     cursor: crosshair;
-    user-select: none;
     -webkit-user-select: none;
+    user-select: none;
     touch-action: none; /* 关键！禁用所有浏览器默认的触控行为，如滚动、缩放 */
 }
 

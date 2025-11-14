@@ -7,77 +7,6 @@ let authToken = null;
 let physicalKeyboardEnabled = false;
 const activeTouches = {};
 
-// ... (keyboardLayout, CLIENT_KEY_MAP 数据定义保持不变) ...
-
-const keyboardLayout = [
-    [ // 第一行: Esc 到 Del
-        { key: 'esc', display: 'Esc', u: 15/14 },
-        { key: 'f1', display: 'F1', u: 15/14 },
-        { key: 'f2', display: 'F2', u: 15/14 },
-        { key: 'f3', display: 'F3', u: 15/14 },
-        { key: 'f4', display: 'F4', u: 15/14 },
-        { key: 'f5', display: 'F5', u: 15/14 },
-        { key: 'f6', display: 'F6', u: 15/14 },
-        { key: 'f7', display: 'F7', u: 15/14 },
-        { key: 'f8', display: 'F8', u: 15/14 },
-        { key: 'f9', display: 'F9', u: 15/14 },
-        { key: 'f10', display: 'F10', u: 15/14 },
-        { key: 'f11', display: 'F11', u: 15/14 },
-        { key: 'f12', display: 'F12', u: 15/14 },
-        { key: 'del', display: 'del', u: 15/14 }
-    ],
-    [ // 第二行: ~ 到 Backspace
-        { key: '`', display: '`', u: 1 }, { key: '1', display: '1', u: 1 },
-        { key: '2', display: '2', u: 1 }, { key: '3', display: '3', u: 1 },
-        { key: '4', display: '4', u: 1 }, { key: '5', display: '5', u: 1 },
-        { key: '6', display: '6', u: 1 }, { key: '7', display: '7', u: 1 },
-        { key: '8', display: '8', u: 1 }, { key: '9', display: '9', u: 1 },
-        { key: '0', display: '0', u: 1 }, { key: '-', display: '-', u: 1 },
-        { key: '=', display: '=', u: 1 }, { key: 'backspace', display: '⌫', u: 2 }
-    ],
-    [ // 第三行: Tab 到 \
-        { key: 'tab', display: 'Tab', u: 1.5 }, { key: 'q', display: 'Q', u: 1 },
-        { key: 'w', display: 'W', u: 1 }, { key: 'e', display: 'E', u: 1 },
-        { key: 'r', display: 'R', u: 1 }, { key: 't', display: 'T', u: 1 },
-        { key: 'y', display: 'Y', u: 1 }, { key: 'u', display: 'U', u: 1 },
-        { key: 'i', display: 'I', u: 1 }, { key: 'o', display: 'O', u: 1 },
-        { key: 'p', display: 'P', u: 1 }, { key: '[', display: '[', u: 1 },
-        { key: ']', display: ']', u: 1 }, { key: '\\', display: '|', u: 1.5 }
-    ],
-    [ // 第四行: Caps 到 Enter
-        { key: 'caps_lock', display: 'Caps', u: 1.8 }, { key: 'a', display: 'A', u: 1 },
-        { key: 's', display: 'S', u: 1 }, { key: 'd', display: 'D', u: 1 },
-        { key: 'f', display: 'F', u: 1 }, { key: 'g', display: 'G', u: 1 },
-        { key: 'h', display: 'H', u: 1 }, { key: 'j', display: 'J', u: 1 },
-        { key: 'k', display: 'K', u: 1 }, { key: 'l', display: 'L', u: 1 },
-        { key: ';', display: ';', u: 1 }, { key: "'", display: "'", u: 1 },
-        { key: 'enter', display: 'Enter', u: 13.7/6 }
-    ],
-    [ // 第五行: Shift 到 Shift
-        { key: 'shift_l', display: 'Shift', u: 2.4 }, { key: 'z', display: 'Z', u: 1 },
-        { key: 'x', display: 'X', u: 1 }, { key: 'c', display: 'C', u: 1 },
-        { key: 'v', display: 'V', u: 1 }, { key: 'b', display: 'B', u: 1 },
-        { key: 'n', display: 'N', u: 1 }, { key: 'm', display: 'M', u: 1 },
-        { key: ',', display: '<', u: 1 }, { key: '.', display: '>', u: 1 },
-        { key: '/', display: '?', u: 1 }, { key: 'shift_r', display: 'Shift', u: 16.6/6 }
-    ],
-    [ // 第六行: Ctrl 到 Ctrl
-        { key: 'ctrl_l', display: 'Ctrl', u: 1 },
-        { key: 'fn', display: 'Fn', u: 1 },
-        { key: 'cmd', display: 'Win', u: 1 },
-        { key: 'alt_l', display: 'Alt', u: 1.25 },
-        { key: ' ', display: 'Space', u: 5.885 },
-        { key: 'alt_r', display: 'Alt', u: 1.25 },
-        { key: 'ctrl_r', display: 'Ctrl', u: 1 },
-        { key: 'left', display: '←', u: 1 },
-        { 
-            key: 'arrow_up_down', u: 1, class: 'key-container vertical',
-            subKeys: [{ key: 'up', display: '↑' }, { key: 'down', display: '↓' }]
-        },
-        { key: 'right', display: '→', u: 1 }
-    ]
-];
-
 // 客户端的按键名到我们 data-key 的映射表
 // 因为 event.key 的值可能和我们自定义的 data-key 不完全一致
 const CLIENT_KEY_MAP = {
@@ -93,46 +22,52 @@ const CLIENT_KEY_MAP = {
     ' ': ' ' // 空格键 event.key 就是一个空格
 };
 
-function renderKeyboard() {
-    keyboardDiv.innerHTML = ''; // 清空
-    keyboardLayout.forEach(rowLayout => {
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'row';
+// --- 新的“渲染”函数，现在叫 "初始化交互层" ---
+function initInteractionLayer() {
+    const svgElement = document.getElementById('keyboard-layout-svg');
+    const interactionLayer = document.getElementById('interaction-layer');
+    
+    // 清空旧的交互按键 (用于 resize)
+    interactionLayer.innerHTML = '';
 
-        rowLayout.forEach(keyInfo => {
-            const keyDiv = document.createElement('div');
-            keyDiv.className = 'key';
-            keyDiv.dataset.key = keyInfo.key || keyInfo.display;
+    // 获取 SVG 容器的位置和尺寸信息
+    const svgRect = svgElement.getBoundingClientRect();
 
-            // 如果 u 值不是 1，就设置 --key-u 变量
-            if (keyInfo.u && keyInfo.u !== 1) {
-                keyDiv.style.setProperty('--key-u', keyInfo.u);
-            }
-            
-            // 如果有附加 class (用于容器)
-            if (keyInfo.class) {
-                keyDiv.classList.add(...keyInfo.class.split(' '));
-            }
+    // 依然遍历 <g> 元素来获取 data-key
+    const svgKeyGroups = svgElement.querySelectorAll('.key-shape');
 
-            // 处理子按键
-            if (keyInfo.subKeys) {
-                keyInfo.subKeys.forEach(subKeyInfo => {
-                    const subKeyDiv = document.createElement('div');
-                    // 子按键也应用 .key class 以便事件代理能捕捉到，再加上 .sub-key
-                    subKeyDiv.className = 'key sub-key'; 
-                    subKeyDiv.textContent = subKeyInfo.display;
-                    subKeyDiv.dataset.key = subKeyInfo.key;
-                    keyDiv.appendChild(subKeyDiv);
-                });
-            } else {
-                keyDiv.textContent = keyInfo.display;
-            }
+    svgKeyGroups.forEach(svgGroup => {
+        const keyData = svgGroup.dataset.key;
+        if (!keyData) return;
 
-            rowDiv.appendChild(keyDiv);
-        });
-        keyboardDiv.appendChild(rowDiv);
+        // --- 关键修正：不获取 <g> 的边界，而是找到它内部的 <rect> ---
+        const keyRectElement = svgGroup.querySelector('rect');
+        if (!keyRectElement) {
+            console.warn(`Key group with data-key="${keyData}" is missing a <rect> element.`);
+            return;
+        }
+        
+        // 获取 <rect> 元素的精确位置和尺寸
+        const keyRect = keyRectElement.getBoundingClientRect();
+
+        // 创建一个对应的、看不见的交互 div
+        const interactionDiv = document.createElement('div');
+        interactionDiv.className = 'interaction-key';
+        interactionDiv.dataset.key = keyData;
+
+        // 设置它的绝对位置和尺寸
+        // 位置是相对于 SVG 容器的
+        interactionDiv.style.left = `${keyRect.left - svgRect.left}px`;
+        interactionDiv.style.top = `${keyRect.top - svgRect.top}px`;
+        interactionDiv.style.width = `${keyRect.width}px`;
+        interactionDiv.style.height = `${keyRect.height}px`;
+
+        // 把这个交互 div 添加到交互层
+        interactionLayer.appendChild(interactionDiv);
     });
 }
+
+
 
 // --- 认证核心逻辑 ---
 function showAuthScreen(message = '') {
@@ -209,34 +144,135 @@ async function sendclipboardText() {
 }
 
 
-function handlePress(element) {
-    if (!element) return;
-    element.classList.add('pressed');
-    sendKeyEvent(element.dataset.key, 'down');
-}
+// --- 修改事件监听逻辑，现在监听交互层 ---
+function setupEventListeners() {
+    const interactionLayer = document.getElementById('interaction-layer');
+    const svgElement = document.getElementById('keyboard-layout-svg');
 
-function handleRelease(element) {
-    if (!element) return;
-    element.classList.remove('pressed');
-    sendKeyEvent(element.dataset.key, 'up');
-}
 
-// === 新增：节流工具函数 ===
-function throttle(func, delay) {
-    let timeoutId = null;
-    let lastArgs = null;
-    let lastThis = null;
+    let activeTouches = {};
+    let physicalKeyboardEnabled = false;
 
-    return function(...args) {
-        lastArgs = args;
-        lastThis = this;
-
-        if (!timeoutId) {
-            timeoutId = setTimeout(() => {
-                func.apply(lastThis, lastArgs);
-                timeoutId = null; // 执行完毕，重置计时器
-            }, delay);
+    // --- 统一的 Press 和 Release 处理器 ---
+    const handlePress = (keyData) => {
+        if (!keyData) return;
+        // 视觉反馈：给对应的 SVG 元素添加 .pressed class
+        const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
+        if (svgKey) {
+            svgKey.classList.add('pressed');
         }
+        sendKeyEvent(keyData, 'down'); // 发送事件 (WebSocket)
+    };
+
+    const handleRelease = (keyData) => {
+        if (!keyData) return;
+        const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
+        if (svgKey) {
+            svgKey.classList.remove('pressed');
+        }
+        sendKeyEvent(keyData, 'up');
+    };
+
+    // --- 触控事件 (作用于交互层) ---
+    interactionLayer.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (target && target.classList.contains('interaction-key')) {
+                activeTouches[touch.identifier] = target;
+                handlePress(target.dataset.key);
+            }
+        }
+    });
+
+    interactionLayer.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            const target = activeTouches[touch.identifier];
+            if (target) {
+                handleRelease(target.dataset.key);
+                delete activeTouches[touch.identifier];
+            }
+        }
+    });
+
+    // touchcancel 也很重要
+    interactionLayer.addEventListener('touchcancel', (e) => {
+        // 行为和 touchend 类似
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            const target = activeTouches[touch.identifier];
+            if (target) {
+                handleRelease(target.dataset.key);
+                delete activeTouches[touch.identifier];
+            }
+        }
+    });
+    
+    // --- 鼠标事件 (也作用于交互层，用于桌面端调试) ---
+    let isMouseDown = false;
+    let lastMouseDownKey = null;
+    
+    interactionLayer.addEventListener('mousedown', (e) => {
+        const target = e.target;
+        if (target?.classList.contains('interaction-key')) {
+            isMouseDown = true;
+            lastMouseDownKey = target.dataset.key;
+            handlePress(lastMouseDownKey);
+        }
+    });
+
+    // 监听 document 的 mouseup，这样即使鼠标拖到别处松开也能触发
+    document.addEventListener('mouseup', () => {
+        if (isMouseDown && lastMouseDownKey) {
+            handleRelease(lastMouseDownKey);
+        }
+        isMouseDown = false;
+        lastMouseDownKey = null;
+    });
+
+    // --- 物理键盘事件 (作用于全局 window) ---
+    physicalKeyboardToggle.addEventListener('change', (e) => {
+        physicalKeyboardEnabled = e.target.checked;
+        console.log(`物理键盘映射已 ${physicalKeyboardEnabled ? '启用' : '禁用'}`);
+    });
+    
+    window.addEventListener('keydown', (e) => {
+        if (!physicalKeyboardEnabled) return;
+        
+        // 阻止浏览器的默认行为，比如输入文字、触发快捷键等
+        e.preventDefault();
+
+        // 如果按键一直按着，浏览器会连续触发 keydown，我们只处理第一次
+        if (e.repeat) return;
+        
+        // 将浏览器的 event.key 转换为我们的 data-key
+        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
+
+        // 视觉反馈：让虚拟键盘上对应的按键也亮起来 给对应的 SVG 元素添加 .pressed class
+        /**const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
+        if (svgKey) {
+            svgKey.classList.add('pressed');
+        }**/
+
+        handlePress(key);
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (!physicalKeyboardEnabled) return;
+        e.preventDefault();
+        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
+        handleRelease(key);
+    });
+
+}
+
+// (需要一个 debounce 工具函数来防止 resize 事件过于频繁地触发)
+function debounce(func, delay) {
+    let timeoutId;
+    return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func.apply(this, args), delay);
     };
 }
 
@@ -264,7 +300,12 @@ window.addEventListener('DOMContentLoaded', () => {
     // 绑定触控板事件
     setupTrackpadListeners();
 
-    renderKeyboard(); // 渲染键盘
+    // 渲染键盘
+    initInteractionLayer();
+    setupEventListeners();
+
+    // 监听窗口大小变化，重新计算交互层
+    window.addEventListener('resize', debounce(initInteractionLayer, 100));
 
     // 绑定认证按钮事件
     connectButton.addEventListener('click', authenticateWithPin);
@@ -285,98 +326,6 @@ window.addEventListener('DOMContentLoaded', () => {
         showAuthScreen();
         console.log("未找到本地令牌，需要认证。");
     }
-    // --- 所有事件监听器也放在这里 ---
-    // 物理键盘
-    physicalKeyboardToggle.addEventListener('change', (e) => {
-        physicalKeyboardEnabled = e.target.checked;
-        console.log(`物理键盘映射已 ${physicalKeyboardEnabled ? '启用' : '禁用'}`);
-    });
-    
-    window.addEventListener('keydown', (e) => {
-        if (!physicalKeyboardEnabled) return;
-        
-        // 阻止浏览器的默认行为，比如输入文字、触发快捷键等
-        e.preventDefault();
-
-        // 如果按键一直按着，浏览器会连续触发 keydown，我们只处理第一次
-        if (e.repeat) return;
-        
-        // 将浏览器的 event.key 转换为我们的 data-key
-        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
-
-        // 视觉反馈：让虚拟键盘上对应的按键也亮起来
-        const keyElement = document.querySelector(`[data-key="${key}"]`);
-        if (keyElement) {
-            keyElement.classList.add('pressed');
-        }
-
-        sendKeyEvent(key, 'down');
-    });
-
-    window.addEventListener('keyup', (e) => {
-        if (!physicalKeyboardEnabled) return;
-
-        e.preventDefault();
-
-        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
-
-        // 视觉反馈：熄灭按键
-        const keyElement = document.querySelector(`[data-key="${key}"]`);
-        if (keyElement) {
-            keyElement.classList.remove('pressed');
-        }
-
-        sendKeyEvent(key, 'up');
-    });
-
-    // --- 完善的触控事件处理 ---
-    keyboardDiv.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        for (const touch of e.changedTouches) {
-            const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-            const keyElement = targetElement?.closest('.key');
-            if (keyElement) {
-                activeTouches[touch.identifier] = keyElement;
-                handlePress(keyElement);
-            }
-        }
-    });
-
-    const touchEndHandler = (e) => {
-        e.preventDefault();
-        for (const touch of e.changedTouches) {
-            const keyElement = activeTouches[touch.identifier];
-            if (keyElement) {
-                keyElement.classList.remove('pressed');
-                sendKeyEvent(keyElement.dataset.key, 'up');
-                delete activeTouches[touch.identifier];
-            }
-        }
-    };
-    keyboardDiv.addEventListener('touchend', touchEndHandler);
-    keyboardDiv.addEventListener('touchcancel', touchEndHandler);
-
-    // --- 鼠标事件 (用于桌面调试) ---
-    let isMouseDown = false;
-    let lastMouseDownKey = null;
-
-    keyboardDiv.addEventListener('mousedown', (e) => {
-        const keyElement = e.target.closest('.key');
-        if (keyElement) {
-            isMouseDown = true;
-            lastMouseDownKey = keyElement;
-            handlePress(keyElement);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isMouseDown && lastMouseDownKey) {
-            handleRelease(lastMouseDownKey);
-        }
-        isMouseDown = false;
-        lastMouseDownKey = null;
-    });
-
 
 });
 
