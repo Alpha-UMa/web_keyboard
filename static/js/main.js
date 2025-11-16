@@ -24,7 +24,13 @@ const CLIENT_KEY_MAP = {
 
 // --- 新的“渲染”函数，现在叫 "初始化交互层" ---
 function initInteractionLayer() {
-    const svgElement = document.getElementById('keyboard-layout-svg');
+    // 1. 找到当前激活的 SVG 布局
+    const svgElement = document.querySelector('.keyboard-layout.active-layout');
+    if (!svgElement) {
+        console.error("No active keyboard layout found!");
+        return;
+    }
+
     const interactionLayer = document.getElementById('interaction-layer');
     
     // 清空旧的交互按键 (用于 resize)
@@ -65,6 +71,25 @@ function initInteractionLayer() {
         // 把这个交互 div 添加到交互层
         interactionLayer.appendChild(interactionDiv);
     });
+}
+
+// === 全新的键盘布局切换函数 ===
+function switchLayout(layoutName) {
+    // 1. 移除所有布局的 .active-layout class，并隐藏它们
+    document.querySelectorAll('.keyboard-layout').forEach(svg => {
+        svg.classList.remove('active-layout');
+        svg.style.display = 'none';
+    });
+
+    // 2. 找到目标布局，给它 .active-layout class，并显示它
+    const targetLayout = document.querySelector(`.keyboard-layout[data-layout="${layoutName}"]`);
+    if (targetLayout) {
+        targetLayout.classList.add('active-layout');
+        targetLayout.style.display = 'block';
+
+        // 3. 关键：为新的布局重新生成交互层
+        initInteractionLayer();
+    }
 }
 
 
@@ -157,20 +182,56 @@ function setupEventListeners() {
     const handlePress = (keyData) => {
         if (!keyData) return;
         // 视觉反馈：给对应的 SVG 元素添加 .pressed class
-        const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
-        if (svgKey) {
-            svgKey.classList.add('pressed');
+        // 找到当前激活的 SVG
+        const activeSVG = document.querySelector('.keyboard-layout.active-layout');
+        if (!activeSVG) return;
+        
+        const svgKey = activeSVG.querySelector(`.key-shape[data-key="${keyData}"]`);
+        if (svgKey) svgKey.classList.add('pressed');
+        // --- 关键改动：解析组合键 ---
+        const keys = keyData.split('|');
+
+        // 如果是组合键
+        if (keys.length > 1) {
+            // 先按下所有的修饰键 (除了最后一个)
+            for (let i = 0; i < keys.length - 1; i++) {
+                sendKeyEvent(keys[i], 'down');
+            }
+            // 然后按下并立即抬起主键 (最后一个键)
+            const mainKey = keys[keys.length - 1];
+            sendKeyEvent(mainKey, 'down');
+            // 我们可以加一个非常短暂的延时再抬起，模拟真实操作
+            setTimeout(() => {
+                sendKeyEvent(mainKey, 'up');
+                // 最后，按相反的顺序抬起所有修饰键
+                for (let i = keys.length - 2; i >= 0; i--) {
+                    sendKeyEvent(keys[i], 'up');
+                }
+            }, 50); // 50ms 的延时，感觉更像一次“敲击”
+        } 
+        // 如果是单个按键
+        else {
+            sendKeyEvent(keyData, 'down'); // 发送事件 (WebSocket)
         }
-        sendKeyEvent(keyData, 'down'); // 发送事件 (WebSocket)
     };
 
     const handleRelease = (keyData) => {
         if (!keyData) return;
-        const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
-        if (svgKey) {
-            svgKey.classList.remove('pressed');
+
+        const activeSVG = document.querySelector('.keyboard-layout.active-layout');
+        if (!activeSVG) return;
+        
+        const svgKey = activeSVG.querySelector(`.key-shape[data-key="${keyData}"]`);
+        if (svgKey) svgKey.classList.remove('pressed');
+
+        const keys = keyData.split('|');
+
+        // --- 关键改动：只处理单个按键的抬起 ---
+        // 组合键的抬起逻辑已经在 handlePress 中处理完了
+        if (keys.length === 1) {
+            sendKeyEvent(keyData, 'up');
         }
-        sendKeyEvent(keyData, 'up');
+        // 对于组合键，抬起时不执行任何操作，因为它的生命周期在按下时就已完成
     };
 
     // --- 触控事件 (作用于交互层) ---
@@ -249,12 +310,6 @@ function setupEventListeners() {
         // 将浏览器的 event.key 转换为我们的 data-key
         const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
 
-        // 视觉反馈：让虚拟键盘上对应的按键也亮起来 给对应的 SVG 元素添加 .pressed class
-        /**const svgKey = svgElement.querySelector(`[data-key="${keyData}"]`);
-        if (svgKey) {
-            svgKey.classList.add('pressed');
-        }**/
-
         handlePress(key);
     });
 
@@ -288,12 +343,61 @@ window.addEventListener('DOMContentLoaded', () => {
     modeToggle = document.getElementById('mode-toggle');
     trackpadArea = document.getElementById('trackpad-area');
 
+    const themeToggle = document.getElementById('theme-toggle');
+    const currentTheme = localStorage.getItem('theme') || 'dark'; // 默认暗色
+
+    document.body.classList.add(`theme-${currentTheme}`);
+    if (currentTheme === 'dark') themeToggle.checked = true;
+
+    themeToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            document.body.classList.replace('theme-light', 'theme-dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.body.classList.replace('theme-dark', 'theme-light');
+            localStorage.setItem('theme', 'light');
+        }
+    });
+
+    const fullscreenButton = document.getElementById('fullscreen-btn');
+    let wakeLock = null;
+
+    fullscreenButton.addEventListener('click', async () => {
+        const inputElement = document.getElementById('input-area-container'); // 或其他你想全屏的元素
+
+        try {
+            if (document.fullscreenElement) {
+                // 退出全屏
+                await document.exitFullscreen();
+                if (wakeLock) await wakeLock.release();
+                wakeLock = null;
+            } else {
+                // 进入全屏
+                await inputElement.requestFullscreen();
+                // 请求屏幕常亮
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('屏幕常亮已激活');
+                }
+            }
+        } catch(err) {
+            console.error(`全屏或屏幕常亮失败: ${err.name}`, err.message);
+        }
+    });
+
+    /**
+    const layoutToggle = document.getElementById('layout-toggle');
+    layoutToggle.addEventListener('change', (e) => {
+        switchLayout(e.target.value);
+    });**/
+
     // 模式切换逻辑
     modeToggle.addEventListener('change', (e) => {
         if (e.target.value === 'trackpad') {
             document.body.classList.add('trackpad-mode');
-        } else {
+        } else{
             document.body.classList.remove('trackpad-mode');
+            switchLayout(e.target.value);
         }
     });
 
@@ -301,7 +405,9 @@ window.addEventListener('DOMContentLoaded', () => {
     setupTrackpadListeners();
 
     // 渲染键盘
-    initInteractionLayer();
+    switchLayout("default");
+    //initInteractionLayer();
+    // 监听事件
     setupEventListeners();
 
     // 监听窗口大小变化，重新计算交互层
@@ -387,7 +493,7 @@ let touchState = {
 };
 
 // 鼠标速度/滚动速度系数
-const MOUSE_SPEED_FACTOR = 3.0; // 可以调整
+const MOUSE_SPEED_FACTOR = 3.5; // 可以调整
 const SCROLL_SPEED_FACTOR = 0.1; // 可以调整
 
 // === 新增：低通滤波器的权重 ===

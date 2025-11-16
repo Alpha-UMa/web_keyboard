@@ -67,7 +67,7 @@ def add_token(token):
     save_tokens()
 
 def cleanup():
-    """程序退出时删除令牌文件"""
+    """删除令牌文件"""
     if os.path.exists(TOKEN_DB_FILE):
         os.remove(TOKEN_DB_FILE)
         logging.info("Token database cleaned up.")
@@ -332,4 +332,4 @@ if __name__ == '__main__':
     # 监听在本地，局域网内的其他设备通过 nginx 反向代理访问
     # debug=True 会在代码修改后自动重启，但生产环境请关闭
     # debug=False 在这里很重要，因为 debug 模式会运行两次初始化，可能导致 PIN 码问题 
-    socketio.run(app, host='127.0.0.1', port=8000, debug=False)
+    socketio.run(app, host='127.0.0.1', port=18000, debug=False)

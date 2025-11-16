@@ -1,33 +1,34 @@
 :root {
-    --key-bg: #555;
-    --key-bg-pressed: #77aaff;
-    --key-border-color: #666;
-    --keyboard-bg: #444;
-    --text-color: #fff;
     --radius: 5px;
     /* 默认暗色主题 */
     --bg-color: #333;
+    --keyboard-bg: #444;
     --text-color: #fff;
     --key-bg: #555;
     --key-stroke: #666;
     --key-pressed-bg: #77aaff;
     --svg-icon-color: #fff;
+    --key-border-color: #666;
+    --trackpad-area-bg: #2d2d2d;
 }
 
 body.theme-light {
     /* 亮色主题下的颜色变量 */
-    --bg-color: #f0f0f0;
+    --bg-color: #ffffff;
+    --keyboard-bg: #ececec;
     --text-color: #333;
-    --key-bg: #fff;
+    --key-bg: #f0f0f0;
     --key-stroke: #ccc;
     --key-pressed-bg: #d0e0ff;
-    --svg-icon-color: #555;
+    --svg-icon-color: #333;
+    --key-border-color: #666;
+    --trackpad-area-bg: #dddddd;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     text-align: center;
-    background-color: #333;
+    background-color: var(--bg-color);
     color: var(--text-color);
     margin: 0;
     padding: 10px;
@@ -42,14 +43,14 @@ body {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    background-color: rgba(0, 0, 0, 0.85);
+    background-color: var(--bg-color);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
     -webkit-backdrop-filter: blur(5px);
     backdrop-filter: blur(5px);
-    color: white;
+    color: var(--text-color);
 }
 .auth-box {
     background-color: var(--keyboard-bg);
@@ -65,8 +66,8 @@ body {
     letter-spacing: 5px;
     margin: 15px 0;
     border: 1px solid var(--key-border-color);
-    background-color: #333;
-    color: white;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 .auth-box button {
     font-size: 16px;
@@ -77,60 +78,66 @@ body {
     color: #ff8a8a;
     height: 20px;
 }
+
 #keyboard {
     position: relative;
     width: 96vw;
-    max-width: 1200px;
+    max-width: 2400px;
     margin: auto;
     /* 我们可以给它一个 aspect-ratio，让它保持 SVG 的比例 */
-    aspect-ratio: 415.7615 / 165.7;
+    /* aspect-ratio: 415.7615 / 165.7; */
 }
 
-#keyboard-layout-svg {
+.keyboard-layout {
+    /*position: absolute;  我们让 SVG 覆盖在按键交互层的下面 */
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     /*filter: invert(1); 保持你的主题切换技巧 */
+    z-index: 1; /* 比交互层低 */
 }
 
 /* SVG 按键的样式 */
-#keyboard-layout-svg .key-shape rect {
-    fill: #555; /* 默认按键颜色 */
-    stroke: #666;
+.keyboard-layout .key-shape rect {
+    fill: var(--key-bg); /* 默认按键颜色 */
+    stroke: var(--key-stroke);
     stroke-width: 0.5;
     transition: fill 0.1s ease; /* 按下颜色变化的过渡效果 */
 }
-#keyboard-layout-svg .key-shape text {
+.keyboard-layout .key-shape text {
     -webkit-user-select: none; /* 针对Webkit浏览器 */
     -moz-user-select: none; /* 针对Firefox */
     -ms-user-select: none; /* 针对IE10+ */
     user-select: none; /* 禁止文字选择 */
-    fill: #fff;
+    fill: var(--text-color);
     pointer-events: none; /* 确保文字不会干扰事件 */
 }
 
-#keyboard-layout-svg .key-shape line {
-    stroke: #fff;
+.keyboard-layout .key-shape line {
+    stroke: var(--svg-icon-color);
     pointer-events: none;
 }
 
-#keyboard-layout-svg .key-shape path {
-    stroke: #fff;
-    fill: #fff;
+.keyboard-layout .key-shape path {
+    stroke: var(--svg-icon-color);
+    fill: var(--svg-icon-color);
     pointer-events: none;
 }
 
 /* SVG 按键按下的样式 */
-#keyboard-layout-svg .key-shape.pressed rect {
-    fill: #77aaff; /* 按下时的颜色 */
+.keyboard-layout .key-shape.pressed rect {
+    fill: var(--key-pressed-bg); /* 按下时的颜色 */
 }
 
 
-#interaction-layer {
+.interaction-layer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
+    z-index: 10; /* 确保它在最上面接收事件 */
 }
 
 /* 交互 div 的样式 (它们是看不见的) */
@@ -141,27 +148,11 @@ body {
     -webkit-tap-highlight-color: transparent; /* 去掉移动端点击高光 */
 }
 
-.key {
-    /*grid-column: span var(--key-fr, 28);  关键！按键宽度由它占几份(fr)决定 */
-    height: 5.9vw; /* 高度也用相对单位，保证长宽比大致固定 */
-    /* --- 关键改动在这里 --- */
-    border: 0px solid var(--key-border-color);
-    background-color: var(--key-bg);
-    /* ... 其他视觉样式 ... */
-    transition: transform 0.05s ease, background-color 0.05s ease;
-}
-
-.key.pressed {
-    background-color: var(--key-bg-pressed);
-    transform: scale(1);
-}
-
-
 #trackpad-area {
     width: 98vw; /* 和键盘等宽 */
     height: 75vh; /* 占据大部分屏幕高度 */
-    max-width: 1200px;
-    background-color: #2d2d2d; /* 给一个深色背景以示区分 */
+    max-width: 2400px;
+    background-color: var(--trackpad-area-bg); /* 给一个深色背景以示区分 */
     border: 1px dashed var(--key-border-color);
     border-radius: var(--radius);
     cursor: crosshair;
@@ -197,4 +188,58 @@ body.trackpad-mode #keyboard {
 }
 .settings input {
     margin-right: 8px;
+}
+
+/* --- 全屏状态下的样式 --- */
+
+/* 当 #input-area-container 处于全屏模式时 */
+#input-area-container:fullscreen {
+    /* 
+     * 让它像 body 一样，成为一个 flex 容器来居中它的子元素。
+     * 这样无论键盘还是触控板，都能在全屏视图中居中。
+     */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    /* 让容器自身填满全屏 */
+    width: 100% !important;
+    height: 100% !important;
+    
+    /* 设置一个与主题匹配的背景色 */
+    background-color: var(--bg-color);
+}
+
+/* 
+ * ::backdrop 伪元素，用于定义全屏元素背后的“幕布”颜色
+ * 这能覆盖掉默认的黑色背景
+ */
+#input-area-container::backdrop {
+    background-color: var(--bg-color);
+}
+
+/* --- 在全屏样式部分新增 --- */
+
+/* 当 #input-area-container 处于全屏模式时，它内部的 #trackpad-area 的样式 */
+#input-area-container:fullscreen #trackpad-area {
+    /* 覆盖原有的尺寸，让它填满父容器（也就是整个屏幕）
+    width: 100%;
+    height: 100%;*/
+    max-width: none; /* 取消最大宽度限制 */
+    
+    /* 也许你不想让它完全贴边，可以留一点边距 */
+    width: 98%;
+    height: 98%; 
+    
+    border: none; /* 全屏时可以去掉边框，更具沉浸感 */
+}
+
+/* 同时，我们也可以让键盘在全屏时稍微变大一点 */
+#input-area-container:fullscreen #keyboard {
+    /* 例如，让它比非全屏时大 10% 
+    transform: scale(1.1);*/
+    /* 注意：transform: scale 不会改变布局占位，可能需要配合其他属性 */
+    
+    /* 或者更简单地，调整它的 width */
+    width: 98vw;
 }

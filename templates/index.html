@@ -13,11 +13,24 @@
             <input type="checkbox" id="physical-keyboard-toggle">
             启用物理键盘映射
         </label>
-        <span>|</span>
+        <label for="theme-toggle">
+            <input type="checkbox" id="theme-toggle">
+            亮暗模式切换
+        </label>
+        <label for="fullscreen-btn">
+            <input type="button" id="fullscreen-btn">
+            全屏
+        </label>
+        <label for="sendclipboardText-btn">
+            <input type="button" id="sendclipboardText-btn" onclick="sendclipboardText()">
+            发送剪贴板文字
+        </label>
         <label>
             模式: 
             <select id="mode-toggle">
-                <option value="keyboard" selected>键盘</option>
+                <option value="default">键盘</option>
+                <option value="keyboard2">键盘2</option>
+                <option value="keyboard3">快捷键盘</option>
                 <option value="trackpad">触控板</option>
             </select>
         </label>
@@ -26,7 +39,7 @@
     <div id="input-area-container">
         <div id="keyboard">
             <!-- SVG 作为底层布局 -->
-            <svg id="keyboard-layout-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 415.7615 165.7" preserveAspectRatio="xMidYMid meet">
+            <svg class="keyboard-layout active-layout" data-layout="default" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 415.7615 165.7615" preserveAspectRatio="xMidYMid meet">
                 <defs>
                     <style type="text/css">
                     @font-face {
@@ -417,6 +430,55 @@
             
             </g>
 
+            </svg>
+            <svg class="keyboard-layout" data-layout="keyboard2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.7615 25.7615" preserveAspectRatio="xMidYMid meet">
+
+            <g transform="translate(-7.61925,-25.38075)">
+            <title>Layer 1</title>
+                <g class="key-shape" data-key="ctrl_l">
+                <rect x="8" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_29" rx="1"/>
+                <text x="20.5" y="39.03061" text-anchor="middle" alignment-baseline="middle" font-size="11" id="svg_30" font-weight="bold">ctrl</text>
+                </g>
+                <g class="key-shape" data-key="c">
+                <rect x="36" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_31" rx="1"/>
+                <text x="48.5" y="39.03061" text-anchor="middle" alignment-baseline="middle" font-size="9" id="svg_32" font-weight="bold">C</text>
+                </g>
+                <g class="key-shape" data-key="v">
+                <rect x="64" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_33" rx="1"/>
+                <text x="76.5" y="39.03061" text-anchor="middle" alignment-baseline="middle" font-size="9" id="svg_34" font-weight="bold">V</text>
+                </g>
+            </g>
+            </svg>
+            <svg class="keyboard-layout" data-layout="keyboard3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.7615 53.7615" preserveAspectRatio="xMidYMid meet">
+                <g transform="translate(-7.61925,-25.38075)">
+                    <title>Layer 1</title>
+                    <g class="key-shape" data-key="cmd|ctrl_l|shift_l|t">
+                        <rect x="8" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_29" rx="1"/>
+                        <image href="{{ url_for('static', filename='images/Crop And Lock.png') }}" x="9" y="27" width="23" height="23"/>
+                    </g>
+                    <g class="key-shape" data-key="cmd|ctrl_l|shift_l|m">
+                        <rect x="36" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_31" rx="1"/>
+                        <image href="{{ url_for('static', filename='images/MeasureTool.png') }}" x="37" y="27" width="23" height="23"/>
+                    </g>
+                    <g class="key-shape" data-key="cmd|ctrl_l|shift_l|d">
+                        <rect x="64" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_33" rx="1"/>
+                        <image href="{{ url_for('static', filename='images/Light Switch.png') }}" x="65" y="27" width="23" height="23"/>
+                    </g>
+                    <g transform="translate(0,28)">
+                        <g class="key-shape" data-key="cmd|ctrl_l|shift_l|r">
+                            <rect x="8" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_29" rx="1"/>
+                            <image href="{{ url_for('static', filename='images/Crop And Lock2.png') }}" x="9" y="27" width="23" height="23"/>
+                        </g>
+                        <g class="key-shape" data-key="ctrl_l|shift_l|p">
+                            <rect x="36" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_31" rx="1"/>
+                            <image href="{{ url_for('static', filename='images/Mouse Crosshairs.png') }}" x="37" y="27" width="23" height="23"/>
+                        </g>
+                        <g class="key-shape" data-key="cmd|shift_l|/">
+                            <rect x="64" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" id="svg_33" rx="1"/>
+                            <image href="{{ url_for('static', filename='images/Shortcut Guide.png') }}" x="65" y="27" width="23" height="23"/>
+                        </g>
+                    </g>
+                </g>
             </svg>
             <!-- 交互层，一个空的 div，绝对定位于 SVG 之上 -->
             <div id="interaction-layer"></div>
