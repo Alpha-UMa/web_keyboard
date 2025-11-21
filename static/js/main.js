@@ -5,22 +5,8 @@ let keyboardDiv, authOverlay, pinInput, connectButton, authMessage, physicalKeyb
 let modeToggle, trackpadArea;
 let authToken = null;
 let physicalKeyboardEnabled = false;
+let connectionstatus = 1;
 const activeTouches = {};
-
-// 客户端的按键名到我们 data-key 的映射表
-// 因为 event.key 的值可能和我们自定义的 data-key 不完全一致
-const CLIENT_KEY_MAP = {
-    'Control': 'ctrl_l', // 我们不区分左右，统一发左边
-    'Shift': 'shift_l',
-    'Alt': 'alt_l',
-    'Meta': 'cmd',         // macOS 的 Command 或 Windows 的 Win 键
-    'ArrowUp': 'up',
-    'ArrowDown': 'down',
-    'ArrowLeft': 'left',
-    'ArrowRight': 'right',
-    'CapsLock': 'caps_lock',
-    ' ': ' ' // 空格键 event.key 就是一个空格
-};
 
 // --- 新的“渲染”函数，现在叫 "初始化交互层" ---
 function initInteractionLayer() {
@@ -162,7 +148,7 @@ function sendtextEvent(text) {
 async function sendclipboardText() {
   try {
     const text = await navigator.clipboard.readText();
-    sendtextEvent(text);
+    debounce(sendtextEvent(text),100);
   } catch (error) {
     console.error(error.message);
   }
@@ -172,8 +158,6 @@ async function sendclipboardText() {
 // --- 修改事件监听逻辑，现在监听交互层 ---
 function setupEventListeners() {
     const interactionLayer = document.getElementById('interaction-layer');
-    const svgElement = document.getElementById('keyboard-layout-svg');
-
 
     let activeTouches = {};
     let physicalKeyboardEnabled = false;
@@ -308,7 +292,7 @@ function setupEventListeners() {
         if (e.repeat) return;
         
         // 将浏览器的 event.key 转换为我们的 data-key
-        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
+        const key = normalizeForClientMap(e);
 
         handlePress(key);
     });
@@ -316,13 +300,73 @@ function setupEventListeners() {
     window.addEventListener('keyup', (e) => {
         if (!physicalKeyboardEnabled) return;
         e.preventDefault();
-        const key = e.key.length > 1 ? (CLIENT_KEY_MAP[e.key] || e.key.toLowerCase()) : e.key;
+        if (e.repeat) return;
+        const key = normalizeForClientMap(e);
         handleRelease(key);
     });
 
 }
 
-// (需要一个 debounce 工具函数来防止 resize 事件过于频繁地触发)
+const CODE_TO_BASE = {
+  Minus: '-',
+  Equal: '=',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Semicolon: ';',
+  Quote: "'",
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Backquote: '`',
+  ControlLeft: 'ctrl_l',
+  ControlRight: 'ctrl_r',
+  ShiftLeft: 'shift_l',
+  ShiftRight: 'shift_r',
+  AltLeft: 'alt_l',
+  AltRight: 'alt_r',
+  MetaLeft: 'cmd_l',
+  MetaRight: 'cmd_r'
+};
+
+// 客户端的按键名到我们 data-key 的映射表
+// 因为 event.key 的值可能和我们自定义的 data-key 不完全一致
+const CLIENT_KEY_MAP = {
+    'arrowup': 'up',
+    'arrowdown': 'down',
+    'arrowleft': 'left',
+    'arrowright': 'right',
+    'capslock': 'caps_lock',
+    'control': 'ctrl',
+    'meta': 'cmd',
+    'shift': 'shift',
+    'escape': 'esc',
+    'printscreen': 'print_screen',
+    'pageup': 'page_up',
+    'pagedown': 'page_down',
+    'numlock': 'num_lock',
+    'scrolllock': 'scroll_lock',
+    ' ': ' ',
+};
+
+function baseFromEvent(e) {
+  const code = e.code || '';
+  if (code.startsWith('Key')) return code.slice(3).toLowerCase(); // KeyA -> 'a'
+  if (code.startsWith('Digit')) return code.slice(5); // Digit1 -> '1'
+  if (CODE_TO_BASE[code]) return CODE_TO_BASE[code];
+  // 回退：如果没有 code 或不在映射中，用 e.key 的“去 Shift”形式（字母小写）
+  const k = e.key || '';
+  return k.length === 1 ? k.toLowerCase() : k; // 非单字符按原样或按 CLIENT_KEY_MAP 处理
+}
+
+function normalizeForClientMap(e) {
+  const base = baseFromEvent(e);
+  // CLIENT_KEY_MAP 优先映射 base（未被 Shift 修改的字符）
+  const base2 = base.toLowerCase();
+  return CLIENT_KEY_MAP[base2] || base2;
+}
+
+// (需要一个 debounce 工具函数来防止事件过于频繁地触发)
 function debounce(func, delay) {
     let timeoutId;
     return function(...args) {
@@ -344,26 +388,67 @@ window.addEventListener('DOMContentLoaded', () => {
     trackpadArea = document.getElementById('trackpad-area');
 
     const themeToggle = document.getElementById('theme-toggle');
-    const currentTheme = localStorage.getItem('theme') || 'dark'; // 默认暗色
+    // 防止初次闪烁：在CSS里默认隐藏过渡，JS加载后再启用
+    //document.documentElement.style.setProperty('--transition', '0ms');
 
-    document.body.classList.add(`theme-${currentTheme}`);
+    // 初始化主题
+    const saved = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const currentTheme = saved || (prefersDark ? 'dark' : 'light');
     if (currentTheme === 'dark') themeToggle.checked = true;
+    
+    requestAnimationFrame(() => {
+    document.documentElement.style.setProperty('--transition', '300ms cubic-bezier(.2,.9,.2,1)');
+    });
 
+    // 切换事件（使用 classList.toggle/replace 更稳健）
     themeToggle.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            document.body.classList.replace('theme-light', 'theme-dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.body.classList.replace('theme-dark', 'theme-light');
-            localStorage.setItem('theme', 'light');
+    const next = e.target.checked ? 'dark' : 'light';
+    document.body.classList.remove('theme-light', 'theme-dark');
+    document.body.classList.add(`theme-${next}`);
+    localStorage.setItem('theme', next);
+    });
+
+    // 模式切换逻辑
+    modeToggle.addEventListener('change', (e) => {
+        if (e.target.value === 'trackpad') {
+            document.body.classList.add('trackpad-mode');
+        } else{
+            document.body.classList.remove('trackpad-mode');
+            switchLayout(e.target.value);
         }
     });
 
-    const fullscreenButton = document.getElementById('fullscreen-btn');
-    let wakeLock = null;
+      const wrap = document.getElementById('fabWrap');
+      const main = document.getElementById('fabMain');
+      const popList = document.getElementById('popList');
 
-    fullscreenButton.addEventListener('click', async () => {
+      let open = false;
+      function setOpen(state){
+        open = !!state;
+        wrap.classList.toggle('open', open);
+        main.setAttribute('aria-expanded', String(open));
+        wrap.setAttribute('aria-expanded', String(open));
+        popList.setAttribute('aria-hidden', String(!open));
+        // 动画后如果关闭则禁用弹出项的 pointer-events（保持流畅）
+        if(!open){
+          // 允许动画完成后禁用
+          setTimeout(()=> {
+            // no-op here (pointer-events controlled by CSS .open), kept for extensibility
+          }, 250);
+        }
+      }
+
+      main.addEventListener('click', (e) => {
+        setOpen(!open);
+      });
+
+      // 点击弹出按钮的处理示例
+      document.getElementById('pop1').addEventListener('click', async () => {
+        // 在这里放置按钮1的行为
         const inputElement = document.getElementById('input-area-container'); // 或其他你想全屏的元素
+
+        let wakeLock = null;
 
         try {
             if (document.fullscreenElement) {
@@ -383,23 +468,18 @@ window.addEventListener('DOMContentLoaded', () => {
         } catch(err) {
             console.error(`全屏或屏幕常亮失败: ${err.name}`, err.message);
         }
-    });
+        setOpen(false);
+      });
+      document.getElementById('pop2').addEventListener('click', () => {
+        // 在这里放置按钮2的行为
+        sendclipboardText();
+        setOpen(false);
+      });
 
-    /**
-    const layoutToggle = document.getElementById('layout-toggle');
-    layoutToggle.addEventListener('change', (e) => {
-        switchLayout(e.target.value);
-    });**/
-
-    // 模式切换逻辑
-    modeToggle.addEventListener('change', (e) => {
-        if (e.target.value === 'trackpad') {
-            document.body.classList.add('trackpad-mode');
-        } else{
-            document.body.classList.remove('trackpad-mode');
-            switchLayout(e.target.value);
-        }
-    });
+      // 点击页面其他地方关闭菜单（可选）
+      document.addEventListener('click', (e) => {
+        if (!wrap.contains(e.target) && open) setOpen(false);
+      });
 
     // 绑定触控板事件
     setupTrackpadListeners();
@@ -449,22 +529,76 @@ let socket;
 // === 替换/重写 sendKeyEvent 和 sendMouseEvent ===
 function setupSocketIO() {
     // 建立连接
-    socket = io({ secure: true }); // 因为我们用了 https
+    socket = io({
+        secure: true, // 因为我们用了 https
+        auth: {
+            token: authToken  // 在 handshake 中发送 token
+        },
+        reconnection: true,
+        reconnectionAttempts: 5,  // 最多重连 5 次
+        reconnectionDelay: 2000,  // 每次重连间隔 2 秒
+    });
 
     socket.on('connect', () => {
         console.log('Socket.IO connected!');
         hideAuthScreen(); // 连接成功后隐藏认证界面
+        updateStatus(3);
     });
 
-    socket.on('disconnect', () => {
-        console.log('Socket.IO disconnected!');
-        showAuthScreen('与服务器的连接已断开');
+    socket.on('disconnect', (reason) => {
+        console.log('Socket.IO disconnected:', reason);
+        // 断网、刷新、服务器重启可能都引发这个事件
+        // 不做 token 清理
+        if (reason === 'io client disconnect') {
+            // Client 手动断开
+        } else {
+            console.log('连接中断，正在重连...');
+            updateStatus(2);
+        }
+    });
+
+    socket.on('connect_error', (reason) => {
+        console.error('connect_error:', reason);
+        // 检查服务器发回的错误是否是认证失败
+        if (reason == 'Error: Connection refused by server') {
+            console.warn('Token 失效，需重新认证');
+            showAuthScreen('认证失效，请重新登录');
+        } else {
+            console.log('连接失败，将尝试重新连接...');
+            updateStatus(2);
+        }
+    });
+
+    socket.io.on('reconnect_failed', () => {
+        console.warn("重连失败，放弃重试。");
+        console.log("连接失败，请点击重试");
+        updateStatus(1);
     });
 
     // 如果需要，可以监听服务器发来的错误信息
     socket.on('error', (data) => {
         console.error('Socket.IO error:', data.message);
     });
+}
+
+function updateStatus(status) {
+    connectionstatus = status;
+    const el = document.getElementById('connection-status');
+    if (connectionstatus == 1) {
+        el.innerHTML = `<span class="status-dot red"></span> 断线中，点击连接`;
+        // 手动重连
+        el.onclick = () => {
+            if (connectionstatus == 1) {
+                setupSocketIO();   // 重新 init socket
+            }
+        };
+    } else if (connectionstatus == 2) {
+        el.innerHTML = `<span class="status-dot yellow"></span> 尝试连接中`;
+        el.onclick = null;
+    } else if (connectionstatus == 3) {
+        el.innerHTML = `<span class="status-dot green"></span> 已连接`;
+        el.onclick = null;
+    }
 }
 
 // 状态机变量

@@ -1,5 +1,9 @@
 :root {
     --radius: 5px;
+    --transition: 0ms;
+    --transition2: 300ms;
+    --btnsize: 50px;       /* 主按钮尺寸 */
+    --popup-gap: 12px;     /* 弹出按钮间距 */
     /* 默认暗色主题 */
     --bg-color: #333;
     --keyboard-bg: #444;
@@ -79,6 +83,122 @@ body {
     height: 20px;
 }
 
+.container {
+    display: flex;
+}
+.right-align {
+    position:absolute;
+    right:50px;
+    top:0px;
+}
+
+/* 隐藏原生复选框 */
+.theme-switch input{ position:absolute; opacity:0; width:0; height:0; }
+
+/* 开关 */
+.theme-switch{
+    display:inline-block;
+    position:relative;
+    cursor: pointer;
+    -webkit-user-select: none; /* 针对Webkit浏览器 */
+    -moz-user-select: none; /* 针对Firefox */
+    -ms-user-select: none; /* 针对IE10+ */
+    user-select:none;
+}
+
+/* 图标样式 */
+.theme-switch .icon{
+    position:absolute;
+    width:32px;
+    height:32px;
+    flex:0 0 32px;
+    opacity:0;
+    transform:scale(0.8);
+    transition:opacity var(--transition), transform var(--transition);
+}
+.theme-switch .icon path, .theme-switch .icon circle{ fill: #ffcc33; }
+
+.theme-switch input:checked + .track .icon-moon{ opacity:1; transform:scale(1); }
+.theme-switch input:not(:checked) + .track .icon-sun{ opacity:1; transform:scale(1); }
+
+/* 左上角容器：fixed 保持在视口左上角 */
+.fab-wrap {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: var(--btnsize);
+    height: auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 8px;
+    z-index: 15;
+    pointer-events: none; /* 默认不接收事件，子元素单独开启 */
+}
+
+/* 公共按钮样式 */
+.fab {
+    pointer-events: auto;
+    width: var(--btnsize);
+    height: var(--btnsize);
+    border-radius: 50%;
+    overflow: visible;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: inline-grid;
+    place-items: center;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+    transform-origin: center;
+    transition: transform var(--transition2) ease, opacity var(--transition2) ease;
+}
+.fab img { width: 100%; height: 100%; object-fit: cover; display:block; border-radius:50%; }
+.fab svg { width: 80%; height: 80%; object-fit: cover; display:block; border-radius:5%; }
+
+/* 弹出按钮容器：绝对定位，相对于 .fab-wrap 底部对齐，向右展开 */
+.pop-list {
+    position: absolute;
+    left: calc(var(--btnsize) + 8px); /* 主按钮顶部开始 */
+    display: flex;
+    /*flex-direction: column;*/
+    flex-direction: row-reverse; /* 从右向左排列，视觉靠近主按钮 */
+    gap: var(--popup-gap);
+    align-items: center;
+    pointer-events: none; /* 初始不可点 */
+}
+
+/* 单个弹出项初始状态（收起时） */
+.pop-item {
+    width: var(--btnsize);
+    height: var(--btnsize);
+    opacity: 0;
+    transform: translateX(8px) scale(0.9);
+    transition: transform var(--transition2) cubic-bezier(.2,.9,.3,1), opacity var(--transition2);
+    pointer-events: none;
+}
+
+/* 当容器有 .open 时弹出项可见且可点 */
+.fab-wrap.open .pop-item {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+}
+
+/* 主按钮打开/关闭状态视觉变化 */
+.fab-main {
+    transition: transform var(--transition2) ease;
+}
+.fab-wrap.open .fab-main {
+    transform: rotate(0deg) scale(0.98);
+}
+
+/* 小屏幕调整（可选） 让组件变得找不到的负优化
+@media (max-width: 480px) {
+    :root { --btnsize: 48px; --popup-gap: 10px; }
+    .fab-wrap { right: 14px; bottom: 14px; }
+}*/
+
 #keyboard {
     position: relative;
     width: 96vw;
@@ -94,7 +214,6 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    /*filter: invert(1); 保持你的主题切换技巧 */
     z-index: 1; /* 比交互层低 */
 }
 
@@ -190,6 +309,31 @@ body.trackpad-mode #keyboard {
     margin-right: 8px;
 }
 
+#connection-status {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color);
+}
+.status-dot {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.1em;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.status-dot.red {
+  background-color: #e74c3c;
+}
+.status-dot.yellow {
+  background-color: #f1c40f;
+}
+.status-dot.green {
+  background-color: #2ecc71;
+}
+
 /* --- 全屏状态下的样式 --- */
 
 /* 当 #input-area-container 处于全屏模式时 */
@@ -222,9 +366,6 @@ body.trackpad-mode #keyboard {
 
 /* 当 #input-area-container 处于全屏模式时，它内部的 #trackpad-area 的样式 */
 #input-area-container:fullscreen #trackpad-area {
-    /* 覆盖原有的尺寸，让它填满父容器（也就是整个屏幕）
-    width: 100%;
-    height: 100%;*/
     max-width: none; /* 取消最大宽度限制 */
     
     /* 也许你不想让它完全贴边，可以留一点边距 */
@@ -236,10 +377,5 @@ body.trackpad-mode #keyboard {
 
 /* 同时，我们也可以让键盘在全屏时稍微变大一点 */
 #input-area-container:fullscreen #keyboard {
-    /* 例如，让它比非全屏时大 10% 
-    transform: scale(1.1);*/
-    /* 注意：transform: scale 不会改变布局占位，可能需要配合其他属性 */
-    
-    /* 或者更简单地，调整它的 width */
     width: 98vw;
 }

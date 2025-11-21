@@ -98,10 +98,18 @@ KEY_MAP = {
     'tab': Key.tab,
     'caps_lock': Key.caps_lock,
     'esc': Key.esc,
+    'delete': Key.delete,
     'space': Key.space,
     'up': Key.up, 'down': Key.down, 'left': Key.left, 'right': Key.right,
     'f1': Key.f1, 'f2': Key.f2, 'f3': Key.f3, 'f4': Key.f4, 'f5': Key.f5, 'f6': Key.f6, 'f7': Key.f7, 'f8': Key.f8, 'f9': Key.f9, 'f10': Key.f10, 'f11': Key.f11, 'f12': Key.f12,
-    # ... 可以继续添加其他功能键 F1-F12 等
+    'home': Key.home, 'page_up': Key.page_up, 'page_down': Key.page_down, 'end': Key.end,
+    'menu': Key.menu,
+    'num_lock': Key.num_lock, 'scroll_lock': Key.scroll_lock,
+    'print_screen': Key.print_screen,
+    'insert': Key.insert,
+    'pause': Key.pause,
+    'media_next': Key.media_next,'media_play_pause': Key.media_play_pause,'media_previous': Key.media_previous,
+    'media_volume_down': Key.media_volume_down,'media_volume_mute': Key.media_volume_mute,'media_volume_up': Key.media_volume_up
 }
 
 # 创建一个鼠标按键的映射，方便处理
@@ -178,12 +186,23 @@ def check_auth_token():
 # --- WebSocket 事件处理器 (新) ---
 # --- 新增：WebSocket 事件处理器 ---
 
+def verify_token(token):
+    if token and token in AUTHORIZED_TOKENS:
+        return {"username": "alice"}
+    return None
+
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth):
     """客户端连接时触发"""
     # 可以在这里做一些初始化的事情，比如验证令牌
-    logging.info('Client connected')
-    # 我们将在每个事件中验证令牌，所以这里暂时不做事
+    token = auth.get("token") if auth else None
+    user = verify_token(token)
+    if not user:
+        logging.warning("WebSocket connect rejected: Invalid token")
+        raise ConnectionRefusedError('AUTH_FAILED')  # 明确拒绝连接理由
+        # return False # 返回 False 将拒绝连接
+       
+    logging.info(f"Client connected: {user['username']}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
