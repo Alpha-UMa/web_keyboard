@@ -18,7 +18,7 @@ QUEUE_LOCK = threading.Lock()
 # 配置日志，方便调试
 logging.basicConfig(level=logging.INFO)
 
-# --- 新增：集中的、基于文件的令牌存储 ---
+# --- 集中的、基于文件的令牌存储 ---
 TOKEN_DB_FILE = 'authorized_tokens.json'
 TOKEN_VALIDITY_SECONDS = 86400 * 7 # 令牌有效期7天 (7 * 24 * 60 * 60)
 # TOKEN_VALIDITY_SECONDS = 2592000 # 令牌有效期30天
@@ -133,7 +133,7 @@ def index():
     return render_template('index.html')
 
 
-# --- 新增：PIN 认证路由 ---
+# --- PIN 认证路由 ---
 @app.route('/auth/pin', methods=['POST'])
 def auth_pin():
     global PIN_CODE, PIN_EXPIRY # 声明要修改全局变量
@@ -157,15 +157,13 @@ def auth_pin():
         return jsonify({"status": "error", "message": "Invalid or expired PIN"}), 401
 
 
-# --- 新增：“守卫”中间件 ---
-# --- 修改“守卫”中间件 ---
+# --- “守卫”中间件 ---
 @app.before_request
 def check_auth_token():
-    # 关键：每次请求时加载并顺便清理过期的令牌
+    # 每次请求时加载并顺便清理过期的令牌
     load_and_prune_tokens()
     # 对所有需要保护的端点进行检查
-    # 如果请求的是认证页、主页或静态文件，则直接放行
-    # 稍微优化一下，让 favicon.ico 也通过
+    # 如果请求的是 favicon.ico、认证页、主页或静态文件，则直接放行
     if request.path == '/favicon.ico' or request.endpoint in ['index', 'auth_pin', 'static']:
         return
 
@@ -182,11 +180,9 @@ def check_auth_token():
         logging.warning(f"Unauthorized access attempt to '{request.endpoint or request.path}' from {request.remote_addr}")
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
     
-# 新增：鼠标事件处理路由
-# --- WebSocket 事件处理器 (新) ---
-# --- 新增：WebSocket 事件处理器 ---
-
+# --- WebSocket 事件处理器 ---
 def verify_token(token):
+    load_and_prune_tokens()
     if token and token in AUTHORIZED_TOKENS:
         return {"username": "alice"}
     return None
@@ -210,6 +206,7 @@ def handle_disconnect():
 
 def check_token_in_payload(data):
     """一个辅助函数，用于检查事件数据中是否包含有效令牌"""
+    load_and_prune_tokens()
     token = data.get('token')
     if token and token in AUTHORIZED_TOKENS:
         return True
@@ -219,7 +216,6 @@ def check_token_in_payload(data):
 @socketio.on('text_event')
 def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
     """处理通过 WebSocket 发送的文本事件"""
-    load_and_prune_tokens()
     
     # 2. 不再需要 request.get_json()，直接使用 data
     if not check_token_in_payload(data):
@@ -239,11 +235,9 @@ def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
         logging.error(f"Error on typing '{text}': {e}")
 
 @socketio.on('key_event')
-def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
+def handle_ws_key_event(data):
     """处理通过 WebSocket 发送的键盘事件"""
-    load_and_prune_tokens()
-    
-    # 2. 不再需要 request.get_json()，直接使用 data
+        
     if not check_token_in_payload(data):
         return
 
@@ -269,14 +263,13 @@ def handle_ws_key_event(data): # 1. 数据直接作为参数 'data' 传入
 
 @socketio.on('mouse_event')
 def handle_ws_mouse_event(data):
-    # 这个函数现在变得和你的 /mouse_event 路由一样简单
-    # 它只负责接收数据并放入队列
+    """接收通过 WebSocket 发送的鼠标事件数据并放入队列"""
     #logging.info("data: %s", data)
 
     if not check_token_in_payload(data):
         return
 
-    # 不再需要解析 event_type，直接把整个 data 包扔进去
+    # 不需要解析 event_type，而是把整个 data 包放进去
     with QUEUE_LOCK:
         EVENT_QUEUE.append(data)
 
@@ -331,7 +324,7 @@ def consumer():
 
 # --- 主程序入口修改 ---
 if __name__ == '__main__':
-    # 关键：在启动时调用一次，清理掉所有旧的过期令牌
+    # 在启动时调用一次，清理掉所有旧的过期令牌
     load_and_prune_tokens()
 
     threading.Thread(target=consumer, daemon=True).start()

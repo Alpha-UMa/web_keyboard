@@ -8,7 +8,7 @@ let physicalKeyboardEnabled = false;
 let connectionstatus = 1;
 const activeTouches = {};
 
-// --- 新的“渲染”函数，现在叫 "初始化交互层" ---
+// --- 渲染函数，初始化交互层 ---
 function initInteractionLayer() {
     // 1. 找到当前激活的 SVG 布局
     const svgElement = document.querySelector('.keyboard-layout.active-layout');
@@ -25,23 +25,24 @@ function initInteractionLayer() {
     // 获取 SVG 容器的位置和尺寸信息
     const svgRect = svgElement.getBoundingClientRect();
 
-    // 依然遍历 <g> 元素来获取 data-key
+    // 遍历 <g> 元素来获取 data-key
     const svgKeyGroups = svgElement.querySelectorAll('.key-shape');
 
     svgKeyGroups.forEach(svgGroup => {
         const keyData = svgGroup.dataset.key;
         if (!keyData) return;
 
-        // --- 关键修正：不获取 <g> 的边界，而是找到它内部的 <rect> ---
         const keyRectElement = svgGroup.querySelector('rect');
-        if (!keyRectElement) {
+        keyRect = svgGroup.getBoundingClientRect();
+        // --- 修正：不获取 <g> 的边界，而是找到它内部的 <rect> (如果有)---
+        if (keyRectElement) {
+            // 获取 <rect> 元素的精确位置和尺寸
+            keyRect = keyRectElement.getBoundingClientRect();
+        } else {
             console.warn(`Key group with data-key="${keyData}" is missing a <rect> element.`);
-            return;
+            //return;
         }
         
-        // 获取 <rect> 元素的精确位置和尺寸
-        const keyRect = keyRectElement.getBoundingClientRect();
-
         // 创建一个对应的、看不见的交互 div
         const interactionDiv = document.createElement('div');
         interactionDiv.className = 'interaction-key';
@@ -59,7 +60,7 @@ function initInteractionLayer() {
     });
 }
 
-// === 全新的键盘布局切换函数 ===
+// === 键盘布局切换函数 ===
 function switchLayout(layoutName) {
     // 1. 移除所有布局的 .active-layout class，并隐藏它们
     document.querySelectorAll('.keyboard-layout').forEach(svg => {
@@ -73,12 +74,10 @@ function switchLayout(layoutName) {
         targetLayout.classList.add('active-layout');
         targetLayout.style.display = 'block';
 
-        // 3. 关键：为新的布局重新生成交互层
+        // 3. 为新的布局重新生成交互层
         initInteractionLayer();
     }
 }
-
-
 
 // --- 认证核心逻辑 ---
 function showAuthScreen(message = '') {
@@ -114,11 +113,10 @@ async function authenticateWithPin() {
 
         if (response.ok) {
             const data = await response.json();
-            // 正确的执行顺序
             authToken = data.token;
             localStorage.setItem('webKeyboardAuthToken', authToken);
             hideAuthScreen();
-            // === 关键：认证成功后，才开始建立 WebSocket 连接 ===
+            // === 认证成功后开始建立 WebSocket 连接 ===
             if (socket) socket.disconnect(); // 断开旧的连接
             setupSocketIO();
         } else {
@@ -131,8 +129,7 @@ async function authenticateWithPin() {
     }
 }
 
-// --- 事件发送 (修改后) ---
-// 新的事件发送函数，现在它只是简单地 emit 事件
+// --- 事件发送 ---
 function sendKeyEvent(key, action) {
     if (socket && authToken) {
         socket.emit('key_event', { key, action, token: authToken });
@@ -172,7 +169,7 @@ function setupEventListeners() {
         
         const svgKey = activeSVG.querySelector(`.key-shape[data-key="${keyData}"]`);
         if (svgKey) svgKey.classList.add('pressed');
-        // --- 关键改动：解析组合键 ---
+        // --- 组合键解析 ---
         const keys = keyData.split('|');
 
         // 如果是组合键
@@ -184,7 +181,7 @@ function setupEventListeners() {
             // 然后按下并立即抬起主键 (最后一个键)
             const mainKey = keys[keys.length - 1];
             sendKeyEvent(mainKey, 'down');
-            // 我们可以加一个非常短暂的延时再抬起，模拟真实操作
+            // 短暂延时后再抬起，模拟真实操作
             setTimeout(() => {
                 sendKeyEvent(mainKey, 'up');
                 // 最后，按相反的顺序抬起所有修饰键
@@ -210,7 +207,7 @@ function setupEventListeners() {
 
         const keys = keyData.split('|');
 
-        // --- 关键改动：只处理单个按键的抬起 ---
+        // --- 改动：只处理单个按键的抬起 ---
         // 组合键的抬起逻辑已经在 handlePress 中处理完了
         if (keys.length === 1) {
             sendKeyEvent(keyData, 'up');
@@ -241,7 +238,6 @@ function setupEventListeners() {
         }
     });
 
-    // touchcancel 也很重要
     interactionLayer.addEventListener('touchcancel', (e) => {
         // 行为和 touchend 类似
         e.preventDefault();
@@ -288,10 +284,10 @@ function setupEventListeners() {
         // 阻止浏览器的默认行为，比如输入文字、触发快捷键等
         e.preventDefault();
 
-        // 如果按键一直按着，浏览器会连续触发 keydown，我们只处理第一次
+        // 如果按键一直按着，浏览器会连续触发 keydown，只处理第一次
         if (e.repeat) return;
         
-        // 将浏览器的 event.key 转换为我们的 data-key
+        // 将浏览器的 event.key 转换为的 data-key
         const key = normalizeForClientMap(e);
 
         handlePress(key);
@@ -329,8 +325,7 @@ const CODE_TO_BASE = {
   MetaRight: 'cmd_r'
 };
 
-// 客户端的按键名到我们 data-key 的映射表
-// 因为 event.key 的值可能和我们自定义的 data-key 不完全一致
+// 客户端的按键名到 data-key 的映射表
 const CLIENT_KEY_MAP = {
     'arrowup': 'up',
     'arrowdown': 'down',
@@ -377,7 +372,7 @@ function debounce(func, delay) {
 
 // --- 主程序入口和事件监听 ---
 window.addEventListener('DOMContentLoaded', () => {
-    // 关键：在这里初始化所有 DOM 相关的变量
+    // 在这里初始化所有 DOM 相关的变量
     keyboardDiv = document.getElementById('keyboard');
     authOverlay = document.getElementById('auth-overlay');
     pinInput = document.getElementById('pin-input');
@@ -401,7 +396,7 @@ window.addEventListener('DOMContentLoaded', () => {
     document.documentElement.style.setProperty('--transition', '300ms cubic-bezier(.2,.9,.2,1)');
     });
 
-    // 切换事件（使用 classList.toggle/replace 更稳健）
+    // 切换事件
     themeToggle.addEventListener('change', (e) => {
     const next = e.target.checked ? 'dark' : 'light';
     document.body.classList.remove('theme-light', 'theme-dark');
@@ -445,7 +440,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
       // 点击弹出按钮的处理示例
       document.getElementById('pop1').addEventListener('click', async () => {
-        // 在这里放置按钮1的行为
+        // 按钮1：全屏
         const inputElement = document.getElementById('input-area-container'); // 或其他你想全屏的元素
 
         let wakeLock = null;
@@ -471,22 +466,20 @@ window.addEventListener('DOMContentLoaded', () => {
         setOpen(false);
       });
       document.getElementById('pop2').addEventListener('click', () => {
-        // 在这里放置按钮2的行为
+        // 按钮2：发送剪贴板文字
         sendclipboardText();
         setOpen(false);
       });
 
-      // 点击页面其他地方关闭菜单（可选）
+      // 点击页面其他地方关闭菜单
       document.addEventListener('click', (e) => {
         if (!wrap.contains(e.target) && open) setOpen(false);
       });
 
     // 绑定触控板事件
     setupTrackpadListeners();
-
     // 渲染键盘
     switchLayout("default");
-    //initInteractionLayer();
     // 监听事件
     setupEventListeners();
 
@@ -515,18 +508,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 });
 
-// === 新增：触控板手势识别核心 ===
-
-// === 替换/新增：触控板逻辑的全局变量 ===
-
-// 手势识别常量
-const TAP_TIMEOUT = 250;       // 单击超时，适当延长以容错
-const DOUBLE_TAP_WINDOW = 350; // 双击间隔
-const DRAG_THRESHOLD = 5;      // 移动多少像素后算作移动/拖拽
-
 let socket;
 
-// === 替换/重写 sendKeyEvent 和 sendMouseEvent ===
 function setupSocketIO() {
     // 建立连接
     socket = io({
@@ -601,6 +584,25 @@ function updateStatus(status) {
     }
 }
 
+// === 触控板手势识别核心 ===
+
+// === 触控板逻辑的全局变量 ===
+
+// 手势识别常量
+const TAP_TIMEOUT = 250;       // 单击超时，适当延长以容错
+const DOUBLE_TAP_WINDOW = 350; // 双击间隔
+const DRAG_THRESHOLD = 5;      // 移动多少像素后算作移动/拖拽
+
+// 鼠标速度/滚动速度系数
+const MOUSE_BASE_SPEED = 1.5;   // 基础速度（微操时用）
+const MOUSE_MAX_SPEED = 4.5;    // 最大速度（快速移动时用）
+const SCROLL_SPEED_FACTOR = 0.1; 
+
+// === 低通滤波器权重 ===
+// 这个值在 0 到 1 之间。值越小，平滑效果越强，但跟随感会略有下降（感觉“黏”一些）。
+// 值越大，跟随感越强，但平滑效果越弱。0.2 是一个不错的起始值。
+const SMOOTHING_FACTOR = 0.5; 
+
 // 状态机变量
 let touchState = {
     startX: 0, startY: 0, // 本次触摸的起始点
@@ -623,29 +625,22 @@ let touchState = {
     // 用于低通滤波的平滑坐标
     smoothX: 0,
     smoothY: 0,
-    isFirstMove: true // 标记是否是移动的第一次事件
+    isFirstMove: true, // 标记是否是移动的第一次事件
+
+    // === 亚像素累加器，解决微操“不动”的问题 ===
+    accX: 0,
+    accY: 0
 };
 
-// 鼠标速度/滚动速度系数
-const MOUSE_SPEED_FACTOR = 3.5; // 可以调整
-const SCROLL_SPEED_FACTOR = 0.1; // 可以调整
-
-// === 新增：低通滤波器的权重 ===
-// 这个值在 0 到 1 之间。值越小，平滑效果越强，但跟随感会略有下降（感觉“黏”一些）。
-// 值越大，跟随感越强，但平滑效果越弱。0.2 是一个不错的起始值。
-const SMOOTHING_FACTOR = 0.2; 
-
-// 新的鼠标事件发送函数，现在它只是简单地 emit 事件
+// 鼠标事件发送函数
 function sendMouseEvent(type, payload = {}) {
     if (socket && authToken) {
         payload.type = type;
         payload.token = authToken;
         socket.emit('mouse_event', payload);
-        //alert("sendMouseEvent")
     }
 }
 
-// === 全新设计的 setupTrackpadListeners 函数 ===
 function setupTrackpadListeners() {
     
     // --- TOUCH START ---
@@ -655,12 +650,16 @@ function setupTrackpadListeners() {
         const touches = e.touches;
         const touch = touches[0];
         const currentTime = new Date().getTime();
-        // --- 关键：在触摸开始时，用当前手指位置重置平滑坐标和滤波器 ---
+        // --- 在触摸开始时，用当前手指位置重置平滑坐标和滤波器 ---
         touchState.smoothX = touch.clientX;
         touchState.smoothY = touch.clientY;
         touchState.isFirstMove = true;
 
-        // --- 关键修正：如果正在多指冷却期，忽略新的触摸事件 ---
+        // --- 重置累加器 ---
+        touchState.accX = 0;
+        touchState.accY = 0;
+
+        // --- 如果正在多指冷却期，忽略新的触摸事件 ---
         if (touchState.inMultiTouchCooldown) {
             return;
         }
@@ -744,7 +743,14 @@ function setupTrackpadListeners() {
             // -- 多指移动 -> 滚动 --
             if (touches.length > 1) {
                 touchState.isScrolling = true;
-                sendMouseEvent('scroll', { dx1: 0, dy: dy1 * SCROLL_SPEED_FACTOR });
+                tan = Math.abs(dy1/dx1)
+                if (tan >= Math.sqrt(3)){
+                    sendMouseEvent('scroll', { dx: 0, dy: dy1 * SCROLL_SPEED_FACTOR });
+                } else if (tan <= Math.sqrt(1/3)) {
+                    sendMouseEvent('scroll', { dx: -dx1 * SCROLL_SPEED_FACTOR , dy: 0 });
+                } else {
+                    sendMouseEvent('scroll', { dx: -dx1 * SCROLL_SPEED_FACTOR , dy: dy1 * SCROLL_SPEED_FACTOR });
+                }
             } 
             // -- 单指移动 --
             else if (!touchState.isMultiTouch) { // 确保不是从多指变回单指
@@ -754,16 +760,34 @@ function setupTrackpadListeners() {
                     sendMouseEvent('press', { button: 'left' });
                 }
                 // -- 普通移动/拖拽中 --
-                // 在 touchmove 的 sendMouseEvent('move', ...) 前面加一行
-                //if (new Date().getTime() - touchState.lastMoveTime < 30) return; // 简易节流
                 touchState.lastMoveTime = new Date().getTime();
 
-                sendMouseEvent('move', { dx: dx1 * MOUSE_SPEED_FACTOR, dy: dy1 * MOUSE_SPEED_FACTOR });
+                // --- 优化：动态加速度计算 ---
+                const dist = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+                let adaptiveFactor = MOUSE_BASE_SPEED;
+                
+                if (dist > 1.5) {
+                    // 移动越快，倍率越高 (线性插值或阶梯)
+                    adaptiveFactor = Math.min(MOUSE_MAX_SPEED, MOUSE_BASE_SPEED + (dist * 0.8));
+                }
+
+                // --- 累加位移（保留小数部分） ---
+                touchState.accX += dx1 * adaptiveFactor;
+                touchState.accY += dy1 * adaptiveFactor;
+
+                // 只发送整数部分的位移
+                const moveX = Math.round(touchState.accX);
+                const moveY = Math.round(touchState.accY);
+
+                if (moveX !== 0 || moveY !== 0) {
+                    sendMouseEvent('move', { dx: moveX, dy: moveY });
+                    // 减去已发送的部分，保留剩下的碎末下次累加
+                    touchState.accX -= moveX;
+                    touchState.accY -= moveY;
+                }           
             }
         }
         
-        touchState.lastX = touch.clientX;
-        touchState.lastY = touch.clientY;
         // 5. 更新“上一次”的平滑坐标
         touchState.lastX = touchState.smoothX;
         touchState.lastY = touchState.smoothY;
@@ -773,7 +797,7 @@ function setupTrackpadListeners() {
     trackpadArea.addEventListener('touchend', (e) => {
         e.preventDefault();
 
-        // --- 关键修正：只有当所有手指都抬起时，才处理点击逻辑 ---
+        // --- 修正：只有当所有手指都抬起时，才处理点击逻辑 ---
         // e.touches.length 是屏幕上【还剩下】的手指数
         if (e.touches.length > 0) {
             return; // 还有手指在屏幕上，不是手势的结束
@@ -813,8 +837,6 @@ function setupTrackpadListeners() {
                         sendMouseEvent('click', { button: 'left' });
                     }, TAP_TIMEOUT);
                 } 
-                // 如果是双击（第二次点击），则不发任何事件，等待拖动
-                // 真正的双击左键行为在现实中很少用，我们简化为“双击并拖动”（才不是，你就从来不用双击打开文件吗￣へ￣）
                 // 双击
                 else if (touchState.tapCount >= 2) {
                     // 清除可能存在的单击计时器
