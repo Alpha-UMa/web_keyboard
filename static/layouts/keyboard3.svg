@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.7615 53.7615" preserveAspectRatio="xMidYMid meet">
+    <g transform="translate(-7.61925,-25.38075)">
+        <g class="key-shape" data-key="cmd|ctrl_l|shift_l|t">
+            <rect x="8" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+            <image href="static/images/Crop And Lock.png" x="9" y="27" width="23" height="23"/>
+        </g>
+        <g class="key-shape" data-key="cmd|ctrl_l|shift_l|m">
+            <rect x="36" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+            <image href="static/images/MeasureTool.png" x="37" y="27" width="23" height="23"/>
+        </g>
+        <g class="key-shape" data-key="cmd|ctrl_l|shift_l|d">
+            <rect x="64" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+            <image href="static/images/Light Switch.png" x="65" y="27" width="23" height="23"/>
+        </g>
+        <g transform="translate(0,28)">
+            <g class="key-shape" data-key="cmd|ctrl_l|shift_l|r">
+                <rect x="8" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+                <image href="static/images/Crop And Lock2.png" x="9" y="27" width="23" height="23"/>
+            </g>
+            <g class="key-shape" data-key="ctrl_l|shift_l|p">
+                <rect x="36" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+                <image href="static/images/Mouse Crosshairs.png" x="37" y="27" width="23" height="23"/>
+            </g>
+            <g class="key-shape" data-key="cmd|shift_l|/">
+                <rect x="64" y="26" width="25" height="25" stroke="black" stroke-linejoin="round" stroke-width="0.38075" fill="transparent" rx="1"/>
+                <image href="static/images/Shortcut Guide.png" x="65" y="27" width="23" height="23"/>
+            </g>
+        </g>
+    </g>
+</svg>

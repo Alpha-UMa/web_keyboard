@@ -7,6 +7,7 @@ let authToken = null;
 let physicalKeyboardEnabled = false;
 let connectionstatus = 1;
 const activeTouches = {};
+const layoutCache = {}; // 用于缓存已加载的布局
 
 // --- 渲染函数，初始化交互层 ---
 function initInteractionLayer() {
@@ -61,20 +62,39 @@ function initInteractionLayer() {
 }
 
 // === 键盘布局切换函数 ===
-function switchLayout(layoutName) {
-    // 1. 移除所有布局的 .active-layout class，并隐藏它们
-    document.querySelectorAll('.keyboard-layout').forEach(svg => {
-        svg.classList.remove('active-layout');
-        svg.style.display = 'none';
-    });
+async function switchLayout(layoutName) {
+    const keyboardContainer = document.getElementById('keyboard');
+    
+    // 1. 检查缓存
+    if (!layoutCache[layoutName]) {
+        try {
+            const response = await fetch(`/static/layouts/${layoutName}.svg`);
+            if (!response.ok) throw new Error(`Layout ${layoutName} not found`);
+            layoutCache[layoutName] = await response.text();
+        } catch (error) {
+            console.error('Failed to load layout:', error);
+            return;
+        }
+    }
 
-    // 2. 找到目标布局，给它 .active-layout class，并显示它
-    const targetLayout = document.querySelector(`.keyboard-layout[data-layout="${layoutName}"]`);
-    if (targetLayout) {
-        targetLayout.classList.add('active-layout');
-        targetLayout.style.display = 'block';
+    // 2. 注入 SVG (保留 interaction-layer)
+    // 移除旧的 SVG 元素（如果存在）
+    const oldSvg = keyboardContainer.querySelector('svg');
+    if (oldSvg) {
+        oldSvg.remove();
+    }
+    
+    // 将新 SVG 插入到交互层之前
+    keyboardContainer.insertAdjacentHTML('afterbegin', layoutCache[layoutName]);
+    
+    const svgElement = keyboardContainer.querySelector('svg');
+    if (svgElement) {
+        // 3. 设置必要的 class 和属性
+        svgElement.classList.add('keyboard-layout', 'active-layout');
+        svgElement.style.display = 'block';
+        svgElement.dataset.layout = layoutName;
 
-        // 3. 为新的布局重新生成交互层
+        // 4. 重新初始化交互层
         initInteractionLayer();
     }
 }
@@ -589,7 +609,7 @@ function updateStatus(status) {
 // === 触控板逻辑的全局变量 ===
 
 // 手势识别常量
-const TAP_TIMEOUT = 250;       // 单击超时，适当延长以容错
+const TAP_TIMEOUT = 200;       // 单击超时，适当延长以容错
 const DOUBLE_TAP_WINDOW = 350; // 双击间隔
 const DRAG_THRESHOLD = 5;      // 移动多少像素后算作移动/拖拽
 

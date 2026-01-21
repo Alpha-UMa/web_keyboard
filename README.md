@@ -130,13 +130,14 @@ server {
 .
 ├── server.py                # Flask 应用，SocketIO 事件处理，pynput 控制
 ├── templates/
-│   └── index.html           # 虚拟键盘界面，SVG 布局定义
+│   └── index.html           # 虚拟键盘界面
 ├── static/
 │   ├── js/
 │   │   ├── main.js          # 前端事件处理，SocketIO 连接逻辑
 │   │   └── socket.io.min.js # SocketIO 客户端库
 │   ├── css/
 │   │   └── style.css        # 样式，主题变量定义
+│   ├── layouts/             # SVG 布局
 │   └── images/
 ├── authorized_tokens.json   # Token 持久化存储（运行时生成）
 └── README.md
@@ -180,13 +181,13 @@ socket.emit('mouse_event', { type: 'scroll', dx: 0, dy: 3, token: authToken });
 
 ### 添加新按键
 
-1. 编辑 `templates/index.html` 中的 SVG 键盘布局
+1. 编辑 `static/layouts/` 下的 SVG 键盘布局
 2. 为新按键元素添加 `data-key` 属性
 3. 前端会自动生成交互层
 
 ### 添加新布局
 
-1. 在 `index.html` 中新增 SVG 元素，设置 `data-layout` 属性
+1. 在 `static/layouts/` 下新增 SVG 文件，设置 `data-layout` 属性
 2. 在模式选择器中添加对应选项
 3. 调用 `switchLayout(layoutName)` 即可切换
 
